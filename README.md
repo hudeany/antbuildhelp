@@ -11,12 +11,26 @@ standalone CLI (`java -jar antbuildhelp.jar ...`).
   cleanup, proxy/PACURL/WPAD via the embedded proxyautoconfig library, TLS
   certificate trust, zip-entry extraction). No dependency on org.apache.tools.ant.*.
 - `GetDependencyTask` — thin Ant task wrapper (`de.soderer.antbuildhelp.GetDependencyTask`,
-  registered as `getDependency` in `antlib.xml`) around `DependencyResolver`.
+  registered as `getDependency` in `antlib.xml`) around `DependencyResolver`. Covers
+  plain URL downloads (optionally zip-extracted), GitHub releases, and Maven
+  artifact mode (via its own `artifactId` attribute).
+- `GetMavenDependencyTask` — thin Ant task wrapper (`de.soderer.antbuildhelp.GetMavenDependencyTask`,
+  registered as `getMavenDependency` in `antlib.xml`) around the same
+  `DependencyResolver`, scoped to Maven artifact mode only. Shorter and clearer
+  for the common case of a pure Maven Central (or Maven-layout-mirror)
+  dependency — no plain-URL-related attributes, and `artifactId` is required
+  (fails fast instead of silently falling back to a literal-URL download if
+  forgotten). See "Maven artifact mode" below; everything documented there for
+  `getDependency`'s Maven mode applies here too, just with `url` renamed to
+  `repositoryUrl` for clarity (it can never be a literal download url in this
+  task).
 - `AntBuildHelpMain` — standalone CLI entry point (jar's Main-Class), same
-  attributes as the Ant task, given as `--key=value` arguments. Run with `--help`
-  for the full option list.
-- `antlib.xml` — registers the `getDependency` task; import all tasks it defines
-  in one line with `<typedef resource="de/soderer/antbuildhelp/antlib.xml" .../>`.
+  attributes as `getDependency` (including Maven mode via `--artifactId`),
+  given as `--key=value` arguments. Run with `--help` for the full option
+  list. (There's no separate CLI mode mirroring `getMavenDependency` — the
+  existing `--artifactId` flags already cover that case for the CLI.)
+- `antlib.xml` — registers the `getDependency` and `getMavenDependency` tasks;
+  import both in one line with `<typedef resource="de/soderer/antbuildhelp/antlib.xml" .../>`.
 - `utilities.jarinjarloader` — JarInJar support classes (`rsrc:` URL protocol),
   used to load the embedded `lib/proxyautoconfig.jar` at runtime without
   extracting it to a temp file. `JarInJarLoader.main()` itself is not used by
@@ -182,6 +196,33 @@ or
                url="https://www.soderer.de/index.php?download=csv.jar"
                useDownloadFileName="true" />
 ```
+
+## Using `getMavenDependency` (Maven-only shorthand)
+
+For pure Maven artifacts, `getMavenDependency` is shorter and clearer than
+`getDependency` — no plain-URL-related attributes, `artifactId` is required
+(fails fast if forgotten, rather than silently downloading a literal `url`
+as-is), and `url` is renamed to `repositoryUrl` since it can never mean a
+literal download url here:
+
+```xml
+<getMavenDependency groupId="org.apache.poi" artifactId="poi" version="5.2.4" />
+
+<getMavenDependency groupId="com.sun.mail" artifactId="mailapi" version="RELEASE" />
+
+<!-- private Maven-layout mirror as repository base, instead of Maven Central -->
+<getMavenDependency repositoryUrl="https://soderer.de/maven2" groupId="de.soderer"
+                    artifactId="soderer-utilities" version="26.2.53" />
+<getMavenDependency repositoryUrl="https://soderer.de/maven2" groupId="de.soderer"
+                    artifactId="soderer-utilities" version="26.2.53" classifier="sources" />
+```
+
+Everything documented above under "Maven artifact mode" for `getDependency`
+(checksum verification, `RELEASE`/`LATEST` resolution, `classifier`,
+`groupId` defaulting to `de.soderer`, etc.) applies identically here — this
+is the same `DependencyResolver` underneath, just without the attributes
+that only make sense for plain-URL downloads (`zipEntry`,
+`useDownloadFileName`, the `{version}` placeholder).
 
 ## Using the CLI
 
