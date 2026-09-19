@@ -6,8 +6,8 @@
 		</attributes>
 	</classpathentry>
 	<classpathentry kind="src" path="src"/>
-	<classpathentry kind="lib" path="lib/json-26.2.2.jar"/>
-	<classpathentry kind="lib" path="lib/proxyautoconfig-26.1.0.jar"/>
+	<classpathentry kind="lib" path="lib/json-26.2.3.jar"/>
+	<classpathentry kind="lib" path="lib/proxyautoconfig-26.1.1.jar"/>
 	<classpathentry kind="lib" path="lib_ant/ant-1.10.17.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
