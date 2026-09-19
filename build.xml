@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project default="cleanup_after" basedir=".">
+	<!-- Dependencies START -->
+	<property name="json.version" value="26.2.2" />
+	<property name="proxyautoconfig.version" value="26.1.0" />
+	
+	<!-- "apacheant" is needed at build time only and is not included in the resulting AntBuildHelp.jar -->
+	<property name="apacheant.version" value="1.10.17" />
+	<!-- Dependencies END -->
+	
+	<available file="${user.home}/git/codeSigning.properties" property="codeSigningPropertiesAvailable" />
+
+	<target name="build_setup">
+		<echo>Java/JVM HOME: ${java.home}</echo>
+		<echo>Java/JVM version: ${ant.java.version}</echo>
+		<echo>Java/JVM detailed version: ${java.version}</echo>
+
+		<loadfile property="build.version" srcFile="build.version" failonerror="false" />
+		<property name="build.version" value="26.0.1" />
+		<echo message="build.version: ${build.version}" />
+
+		<property file="${user.home}/git/codeSigning.properties" />
+
+		<property environment="env"/>
+
+		<property name="lib.dir" value="lib" />
+		<property name="lib.ant.dir" value="lib_ant" />
+		<property name="src.dir" value="src" />
+		<property name="build.dir" value="build" />
+		<property name="classes.dir" value="${build.dir}/classes" />
+		<property name="jar.file" value="${build.dir}/antbuildhelp-${build.version}.jar" />
+
+		<tstamp>
+			<format property="buildTime" pattern="yyyy-MM-dd HH:mm:ss" locale="en" />
+		</tstamp>
+		<echo message="buildTime: ${buildTime}" />
+
+		<condition property="HOME" value="${user.home}">
+			<and>
+				<isset property="user.home" />
+				<available file="${user.home}" type="dir" />
+			</and>
+		</condition>
+		<condition property="HOME" value="${env.HOME}">
+			<and>
+				<isset property="env.HOME" />
+				<available file="${env.HOME}" type="dir" />
+			</and>
+		</condition>
+		<fail message="Property &quot;env.HOME&quot; or &quot;user.home&quot; was not set properly" unless="HOME" />
+	</target>
+	
+	<target name="cleanup_before" depends="build_setup">
+		<delete dir="${build.dir}" />
+	</target>
+
+	<target name="download_dependencies" depends="get_ant, get_json, get_proxyautoconfig" />
+
+	<target name="compile" depends="cleanup_before, build_setup, download_dependencies">
+		<path id="compile.classpath">
+			<fileset dir="${lib.dir}" includes="*.jar" />
+			<fileset dir="${lib.ant.dir}" includes="*.jar" />
+		</path>
+
+		<mkdir dir="${classes.dir}" />
+		<javac srcdir="${src.dir}" destdir="${classes.dir}" includeantruntime="false" release="17" classpathref="compile.classpath" />
+	</target>
+
+	<target name="jar" depends="compile">
+		<mkdir dir="${build.dir}" />
+		<jar destfile="${jar.file}" basedir="${classes.dir}">
+			<manifest>
+				<attribute name="Main-Class" value="de.soderer.antbuildhelp.AntBuildHelpMain" />
+			</manifest>
+			<fileset dir="${src.dir}" excludes="**/*.java" />
+		</jar>
+	</target>
+
+	<target name="sign_jar" depends="jar" if="codeSigningPropertiesAvailable">
+		<signjar destDir="${build.dir}" alias="${CodeSigningKeyAlias}" keystore="${CodeSigningKeyStore}" storepass="${CodeSigningKeyStorePassword}" keypass="${CodeSigningKeyPassword}" preservelastmodified="true" tsaurl="${TsaUrl}">
+			<path>
+				<fileset dir="${build.dir}" includes="antbuildhelp-${build.version}.jar" />
+			</path>
+		</signjar>
+	</target>
+
+	<target name="cleanup_after" depends="sign_jar">
+		<delete dir="${classes.dir}" />
+	</target>
+
+	<available file="lib_ant/ant-${apacheant.version}.jar" property="ant.available" />
+	<target name="get_ant" unless="ant.available">
+		<mkdir dir="lib_ant/" />
+		<delete>
+			<fileset dir="lib_ant" includes="ant-*.jar" />
+		</delete>
+		<get src="https://repo1.maven.org/maven2/org/apache/ant/ant/${apacheant.version}/ant-${apacheant.version}.jar" dest="lib_ant/" />
+	</target>
+
+	<available file="lib/json-${json.version}.jar" property="json.available" />
+	<target name="get_json" unless="json.available">
+		<mkdir dir="lib/" />
+		<delete>
+			<fileset dir="lib" includes="json-*.jar" />
+		</delete>
+		<get src="https://github.com/hudeany/json/releases/download/${json.version}/json-${json.version}.jar" dest="lib/" />
+	</target>
+
+	<available file="lib/proxyautoconfig-${proxyautoconfig.version}.jar" property="proxyautoconfig.available" />
+	<target name="get_proxyautoconfig" unless="proxyautoconfig.available">
+		<mkdir dir="lib/" />
+		<delete>
+			<fileset dir="lib" includes="proxyautoconfig-*.jar" />
+		</delete>
+		<get src="https://github.com/hudeany/ProxyAutoConfig/releases/download/${proxyautoconfig.version}/proxyautoconfig-${proxyautoconfig.version}.jar" dest="lib/" />
+	</target>
+</project>
