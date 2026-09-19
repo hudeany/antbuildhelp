@@ -1,20 +1,28 @@
 # AntBuildHelp
 
-Downloads a single dependency jar into a local Maven-layout-compatible repository
+Includes ANT tasks:
+- getDependency
+  for general download of dependency jar libs
+- getMavenDependency
+  for download of dependency jar libs from a MAVEN2 repository
+- resolveDependencies
+  for download of dependency jar libs by special index jsons files
+
+Each ANT task downloads a single dependency jar into a local Maven-layout-compatible repository
 cache, then copies it into a target `lib/` directory, removing any older version
-of the same dependency found there first. Usable both as an Ant task and as a
-standalone CLI (`java -jar antbuildhelp.jar ...`).
+of the same dependency found there first.
+Usable both as an ANT task and as a standalone CLI (`java -jar antbuildhelp.jar ...`).
 
 ## Package overview
 
 - `DependencyResolver` — the actual resolution logic (download, cache, old-version
   cleanup, proxy/PACURL/WPAD via the embedded proxyautoconfig library, TLS
   certificate trust, zip-entry extraction). No dependency on org.apache.tools.ant.*.
-- `GetDependencyTask` — thin Ant task wrapper (`de.soderer.antbuildhelp.GetDependencyTask`,
+- `GetDependencyTask` — thin ANT task wrapper (`de.soderer.antbuildhelp.GetDependencyTask`,
   registered as `getDependency` in `antlib.xml`) around `DependencyResolver`. Covers
   plain URL downloads (optionally zip-extracted), GitHub releases, and Maven
   artifact mode (via its own `artifactId` attribute).
-- `GetMavenDependencyTask` — thin Ant task wrapper (`de.soderer.antbuildhelp.GetMavenDependencyTask`,
+- `GetMavenDependencyTask` — thin ANT task wrapper (`de.soderer.antbuildhelp.GetMavenDependencyTask`,
   registered as `getMavenDependency` in `antlib.xml`) around the same
   `DependencyResolver`, scoped to Maven artifact mode only. Shorter and clearer
   for the common case of a pure Maven Central (or Maven-layout-mirror)
@@ -42,7 +50,7 @@ standalone CLI (`java -jar antbuildhelp.jar ...`).
 `version` (always required); `url` and/or `artifactId` (at least one required —
 see "Maven artifact mode" below); `name` (required unless `artifactId` is set,
 see below); `groupId` (default `de.soderer`), `libDir` (default
-`<project dir>/lib` for the Ant task, `./lib` for the CLI), `repositoryRoot`
+`<project dir>/lib` for the ANT task, `./lib` for the CLI), `repositoryRoot`
 (default `~/.m2/repository`), `proxyUrl`, `pacUrl`, `useWpad`,
 `tlsCertificateFile`, `zipEntry`, `useDownloadFileName` (optional).
 
@@ -70,7 +78,7 @@ platform-specific downloads, e.g. SWT's `swt.jar` for both Windows and
 Linux), with a trailing `.zip` swapped for `.jar` — so SWT's Windows download
 gets named `swt-4.38-win32-win32-x86_64.jar` instead of `swt-win-4.38-...jar`.
 
-Set `useDownloadFileName="false"` (Ant) / `--useDownloadFileName=false` (CLI)
+Set `useDownloadFileName="false"` (ANT) / `--useDownloadFileName=false` (CLI)
 to always get `<name>-<version>.jar`, regardless of what the download itself
 suggests.
 
