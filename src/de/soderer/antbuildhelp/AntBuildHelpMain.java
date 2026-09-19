@@ -140,10 +140,12 @@ public class AntBuildHelpMain {
 		System.out.println("  --useWpad                       auto-discover PAC via WPAD");
 		System.out.println("  --tlsCertificateFile=<path>     additional trusted certificate (e.g. corporate MITM proxy)");
 		System.out.println("  --zipEntry=<entryPath>           extract this entry from a downloaded zip instead of using it directly");
-		System.out.println("  --useDownloadFileName            default mode only, without --zipEntry: name the libDir");
-		System.out.println("                                   file as the download itself specifies (Content-Disposition");
-		System.out.println("                                   header, else last URL path segment if it ends in .jar/.zip)");
-		System.out.println("                                   instead of <name>-<version>.jar. Defaults to true; pass");
+		System.out.println("  --useDownloadFileName            default mode only: name the libDir file as the download");
+		System.out.println("                                   itself specifies (Content-Disposition header, else last");
+		System.out.println("                                   URL path segment if it ends in .jar/.zip) instead of");
+		System.out.println("                                   <name>-<version>.jar. With --zipEntry, the zip archive's");
+		System.out.println("                                   own name is used (.zip swapped for .jar), not the");
+		System.out.println("                                   extracted entry's name. Defaults to true; pass");
 		System.out.println("                                   --useDownloadFileName=false to always get <name>-<version>.jar");
 		System.out.println();
 		System.out.println("Examples:");

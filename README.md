@@ -36,9 +36,9 @@ Proxy resolution precedence (set at most one): `proxyUrl` > `pacUrl` > `useWpad`
 
 ### `useDownloadFileName` (default: `true`)
 
-Default mode only (no `artifactId`), and only without `zipEntry`: names the
-`libDir` target file as the download itself specifies, instead of the usual
-`<name>-<version>.jar`. Preference order:
+Default mode only (no `artifactId`): names the `libDir` target file as the
+download itself specifies, instead of the usual `<name>-<version>.jar`.
+Preference order:
 
 1. The server's `Content-Disposition` response header, if one is sent
    (handles URLs where the path gives no real filename, e.g.
@@ -49,6 +49,12 @@ Default mode only (no `artifactId`), and only without `zipEntry`: names the
    anything usable — which for a query-string-only url like
    `.../index.php?download=csv.jar` (no `Content-Disposition` sent) is exactly
    what happens anyway, so this default changes nothing there.
+
+With `zipEntry` set, the name is taken from the downloaded **zip archive**
+itself (not the extracted entry — often identically named across several
+platform-specific downloads, e.g. SWT's `swt.jar` for both Windows and
+Linux), with a trailing `.zip` swapped for `.jar` — so SWT's Windows download
+gets named `swt-4.38-win32-win32-x86_64.jar` instead of `swt-win-4.38-...jar`.
 
 Set `useDownloadFileName="false"` (Ant) / `--useDownloadFileName=false` (CLI)
 to always get `<name>-<version>.jar`, regardless of what the download itself
@@ -145,6 +151,9 @@ Produces `build/antbuildhelp-<build.version>.jar`.
                groupId="org.eclipse.swt"
                url="https://archive.eclipse.org/eclipse/downloads/drops4/R-4.38-202512010920/swt-4.38-win32-win32-x86_64.zip"
                zipEntry="swt.jar" />
+<!-- useDownloadFileName (default true) names this "swt-4.38-win32-win32-x86_64.jar" - the
+     zip's own name, not "swt.jar" (the extracted entry, which would collide with the Linux
+     download below since both extract an entry of that same name) -->
 
 <!-- Maven artifact mode: groupId/artifactId/version derive the download URL
      (default base https://repo1.maven.org/maven2/) and enable checksum

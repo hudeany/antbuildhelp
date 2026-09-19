@@ -28,6 +28,11 @@ import org.apache.tools.ant.Task;
  *                groupId="org.eclipse.swt"
  *                url="https://archive.eclipse.org/eclipse/downloads/drops4/R-4.38-202512010920/swt-4.38-win32-win32-x86_64.zip"
  *                zipEntry="swt.jar" />
+ * <!-- useDownloadFileName (default true) here names the libDir file after the zip itself,
+ *      "swt-4.38-win32-win32-x86_64.jar" - not "swt.jar", the extracted entry's own name,
+ *      which would collide with the Linux download below extracting the very same entry
+ *      name. Pass useDownloadFileName="false" to instead get "swt-win-4.38...jar"
+ *      (<name>-<version>.jar). -->
  *
  * <!-- Maven artifact mode: setting artifactId derives the download URL from
  *      repo1.maven.org (groupId/artifactId/version) when url is not given, and verifies
@@ -151,12 +156,15 @@ public class GetDependencyTask extends Task {
 	}
 
 	/**
-	 * Default mode only (no artifactId), and only without zipEntry: defaults to {@link
+	 * Default mode only (no artifactId): defaults to {@link
 	 * DependencyResolver#DEFAULT_USE_DOWNLOAD_FILE_NAME} (true) if not set. If true, the libDir
 	 * target filename is taken from the download itself instead of the usual
 	 * {@code <name>-<version>.jar} - preferring the server's Content-Disposition response header,
 	 * else the last path segment of {@code url} if it ends in ".jar"/".zip", else falling back to
-	 * {@code <name>-<version>.jar}. Set to false to always use {@code <name>-<version>.jar}.
+	 * {@code <name>-<version>.jar}. With zipEntry set, the name is taken from the downloaded zip
+	 * archive itself (not the extracted entry, which may be identically named across several
+	 * platform-specific downloads), with a trailing ".zip" swapped for ".jar". Set to false to
+	 * always use {@code <name>-<version>.jar}.
 	 */
 	public void setUseDownloadFileName(final boolean useDownloadFileName) {
 		this.useDownloadFileName = useDownloadFileName;

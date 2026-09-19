@@ -336,16 +336,19 @@ public class DependencyResolver {
 	}
 
 	/**
-	 * Default mode only (no {@link #setArtifactId}), and only without {@link #setZipEntry}:
-	 * defaults to {@link #DEFAULT_USE_DOWNLOAD_FILE_NAME} (true). If true, the libDir target
-	 * filename is taken from the download itself instead of the usual
-	 * {@code <name>-<version>.jar} - preferring the server's {@code Content-Disposition} response
-	 * header if one is sent, else the last path segment of {@link #url} if it ends in ".jar" or
-	 * ".zip" (query string ignored), else falling back to {@code <name>-<version>.jar} if neither
-	 * yields anything usable - so with url patterns like {@code .../index.php?download=x.jar}
-	 * that give no real filename either way, this setting changes nothing in practice. Note that
-	 * when the repository cache already has the file from a previous run, no request is made
-	 * this run (see {@link #resolve}), so only the url-based fallback is available then - the
+	 * Default mode only (no {@link #setArtifactId}): defaults to {@link
+	 * #DEFAULT_USE_DOWNLOAD_FILE_NAME} (true). If true, the libDir target filename is taken from
+	 * the download itself instead of the usual {@code <name>-<version>.jar} - preferring the
+	 * server's {@code Content-Disposition} response header if one is sent, else the last path
+	 * segment of {@link #url} if it ends in ".jar" or ".zip" (query string ignored), else falling
+	 * back to {@code <name>-<version>.jar} if neither yields anything usable - so with url
+	 * patterns like {@code .../index.php?download=x.jar} that give no real filename either way,
+	 * this setting changes nothing in practice. With {@link #setZipEntry} set, the name is taken
+	 * from the downloaded zip archive itself (not the extracted entry, which is often identically
+	 * named across multiple platform-specific downloads, e.g. SWT's "swt.jar"), with a trailing
+	 * ".zip" swapped for ".jar" (see {@link #deriveExtractedJarFileName}). Note that when the
+	 * repository cache already has the file from a previous run, no request is made this run
+	 * (see {@link #resolve}), so only the url-based fallback is available then - the
 	 * Content-Disposition-derived name from a past run is not remembered. Also note {@link
 	 * #removeOldVersions} still globs old candidates by {@code name + "-*.jar"} - with a
 	 * download-derived filename that doesn't happen to start with "name-", old versions won't be
@@ -458,24 +461,43 @@ public class DependencyResolver {
 	 * The libDir target filename. In Maven artifact mode (see {@link #setArtifactId}) this uses
 	 * standard Maven order, {@code <artifactId>-<version>[-<classifier>].jar}, independent of
 	 * {@link #name} (which only affects the internal repository cache path). If {@link
-	 * #setUseDownloadFileName} is enabled (default mode, no zipEntry), the download-derived name
-	 * is used instead when one could be determined. Otherwise, it's {@code <name>-<version>.jar}.
+	 * #setUseDownloadFileName} is enabled (default mode), the download-derived name is used
+	 * instead when one could be determined - with {@link #zipEntry} set, that name is for the
+	 * downloaded zip archive itself (not the extracted entry, which may be identically named
+	 * across multiple platform-specific downloads, e.g. SWT's "swt.jar"), so it's run through
+	 * {@link #deriveExtractedJarFileName} first (swapping a trailing ".zip" for ".jar"). Falls
+	 * back to {@code <name>-<version>.jar} if useDownloadFileName is off or nothing usable could
+	 * be determined.
 	 */
 	private String buildTargetFileName() {
 		if (artifactId != null) {
 			final String classifierSuffix = classifier != null ? "-" + classifier : "";
 			return artifactId + "-" + version + classifierSuffix + ".jar";
 		}
-		if (useDownloadFileName && zipEntry == null) {
-			if (resolvedDownloadFileName != null) {
-				return resolvedDownloadFileName;
-			}
-			final String fileNameFromUrl = extractFileNameFromUrlPath(url);
-			if (fileNameFromUrl != null) {
-				return fileNameFromUrl;
+		if (useDownloadFileName) {
+			final String downloadFileName =
+					resolvedDownloadFileName != null ? resolvedDownloadFileName : extractFileNameFromUrlPath(url);
+			if (downloadFileName != null) {
+				return zipEntry != null ? deriveExtractedJarFileName(downloadFileName) : downloadFileName;
 			}
 		}
 		return name + "-" + version + ".jar";
+	}
+
+	/**
+	 * Adjusts a zip archive's own filename into a sensible name for the jar extracted from it:
+	 * a trailing ".zip" (case-insensitive) becomes ".jar"; a name already ending in ".jar" is
+	 * used as-is; anything else just gets ".jar" appended.
+	 */
+	private static String deriveExtractedJarFileName(final String zipFileName) {
+		final String lowerCaseFileName = zipFileName.toLowerCase();
+		if (lowerCaseFileName.endsWith(".zip")) {
+			return zipFileName.substring(0, zipFileName.length() - ".zip".length()) + ".jar";
+		}
+		if (lowerCaseFileName.endsWith(".jar")) {
+			return zipFileName;
+		}
+		return zipFileName + ".jar";
 	}
 
 	private Path buildRepositoryJarPath() {
@@ -710,7 +732,10 @@ public class DependencyResolver {
 					+ " for URL: " + downloadUrl);
 		}
 
-		if (useDownloadFileName && artifactId == null && zipEntry == null) {
+		if (useDownloadFileName && artifactId == null) {
+			// Captures the *current* download's own suggested filename - for the zipEntry case
+			// this method is downloading the zip archive itself, not the extracted jar, so the
+			// name gets ".zip" -&gt; ".jar"-adjusted in buildTargetFileName() before use.
 			resolvedDownloadFileName = extractFileNameFromContentDisposition(httpResponse.headers());
 		}
 
