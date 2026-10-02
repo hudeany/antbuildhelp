@@ -101,7 +101,7 @@ Setting `artifactId` switches a dependency into Maven artifact mode:
   intentionally differ from `artifactId`, the actual Maven coordinate.)
 - **`url`**, if given, is no longer the full download URL — it's treated as the
   Maven-layout repository *base* URL (e.g. a private mirror such as
-  `http://soderer.de/maven2`). If omitted, Maven Central
+  `https://soderer.de/maven2`). If omitted, Maven Central
   (`https://repo1.maven.org/maven2/`) is used as the base. Either way, the full
   artifact path (`groupId/artifactId/version/artifactId-version.jar`) is always
   derived and appended.
@@ -184,7 +184,7 @@ Produces `build/antbuildhelp-<build.version>.jar`.
 or
 <getDependency url="https://repo1.maven.org/maven2" groupId="com.sun.mail" artifactId="mailapi" version="RELEASE" />
 or
-<getDependency url="http://soderer.de/maven2" groupId="de.soderer" artifactId="csv" version="26.1.1" />
+<getDependency url="https://soderer.de/maven2" groupId="de.soderer" artifactId="csv" version="26.1.1" />
 
 <!-- classifier: downloads the "sources" jar alongside the regular one -->
 <getDependency groupId="de.soderer" artifactId="JavaUtilities" version="26.2.51" classifier="sources" />
