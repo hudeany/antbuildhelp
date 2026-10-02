@@ -160,7 +160,7 @@ public class AntBuildHelpMain {
 		System.out.println("  java -jar antbuildhelp.jar --groupId=com.sun.mail --artifactId=mailapi --version=RELEASE");
 		System.out.println();
 		System.out.println("  # Maven artifact mode, private Maven-layout mirror as repository base:");
-		System.out.println("  java -jar antbuildhelp.jar --url=http://soderer.de/maven2 --groupId=de.soderer \\");
+		System.out.println("  java -jar antbuildhelp.jar --url=https://soderer.de/maven2 --groupId=de.soderer \\");
 		System.out.println("      --artifactId=csv --version=26.1.1");
 		System.out.println();
 		System.out.println("  # GitHub releases, {version} placeholder, resolving the latest release tag:");

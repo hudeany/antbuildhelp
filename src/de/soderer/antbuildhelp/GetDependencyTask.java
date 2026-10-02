@@ -41,7 +41,7 @@ import org.apache.tools.ant.Task;
  * or
  * <getDependency url="https://repo1.maven.org/maven2" groupId="com.sun.mail" artifactId="mailapi" version="RELEASE" />
  * or
- * <getDependency url="http://soderer.de/maven2" groupId="de.soderer" artifactId="csv" version="26.1.1" />
+ * <getDependency url="https://soderer.de/maven2" groupId="de.soderer" artifactId="csv" version="26.1.1" />
  *
  * <!-- classifier: downloads the "sources" jar alongside the regular one -->
  * <getDependency groupId="de.soderer" artifactId="JavaUtilities" version="26.2.51" classifier="sources" />

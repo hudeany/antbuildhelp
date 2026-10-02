@@ -409,7 +409,7 @@ public class DependencyResolver {
 		}
 		if (artifactId != null) {
 			// Maven artifact mode: 'url', if given, is treated as the repository BASE url (e.g. a
-			// private Maven-layout mirror such as "http://soderer.de/maven2") - not the full
+			// private Maven-layout mirror such as "https://soderer.de/maven2") - not the full
 			// download url. The full artifact path is always derived and appended. If 'url' is
 			// not given, Maven Central's repo1.maven.org is used as the default base.
 			url = buildMavenArtifactUrl(url != null ? url : MAVEN_CENTRAL_BASE_URL);
