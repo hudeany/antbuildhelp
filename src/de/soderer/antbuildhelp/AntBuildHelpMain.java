@@ -18,7 +18,7 @@ import java.util.Map;
  * <pre>{@code
  * java -jar antbuildhelp.jar \
  *     --name=RestClient --version=26.0.82 \
- *     --url=https://www.soderer.de/index.php?download=RestClient.jar \
+ *     --url=https://some-repository.com/index.php?download=RestClient.jar \
  *     --libDir=lib --useWpad --tlsCertificateFile=zscaler-root.cer
  *
  * // Maven artifact mode: --artifactId switches on automatic URL derivation
@@ -150,7 +150,7 @@ public class AntBuildHelpMain {
 		System.out.println();
 		System.out.println("Examples:");
 		System.out.println("  java -jar antbuildhelp.jar --name=RestClient --version=26.0.82 \\");
-		System.out.println("      --url=https://www.soderer.de/index.php?download=RestClient.jar \\");
+		System.out.println("      --url=https://some-repository.com/index.php?download=RestClient.jar \\");
 		System.out.println("      --libDir=lib --useWpad --tlsCertificateFile=zscaler-root.cer");
 		System.out.println();
 		System.out.println("  # Maven artifact mode, Maven Central, explicit version:");
@@ -174,6 +174,6 @@ public class AntBuildHelpMain {
 		System.out.println("  # useDownloadFileName defaults to true (shown here explicitly) - naming the file as the");
 		System.out.println("  # download/server specifies; pass --useDownloadFileName=false to opt out:");
 		System.out.println("  java -jar antbuildhelp.jar --name=csv --version=26.1.1 \\");
-		System.out.println("      --url=https://www.soderer.de/index.php?download=csv.jar --useDownloadFileName");
+		System.out.println("      --url=https://some-repository.com/index.php?download=csv.jar --useDownloadFileName");
 	}
 }

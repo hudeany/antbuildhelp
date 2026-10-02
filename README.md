@@ -101,7 +101,7 @@ Setting `artifactId` switches a dependency into Maven artifact mode:
   intentionally differ from `artifactId`, the actual Maven coordinate.)
 - **`url`**, if given, is no longer the full download URL — it's treated as the
   Maven-layout repository *base* URL (e.g. a private mirror such as
-  `https://soderer.de/maven2`). If omitted, Maven Central
+  `https://some-repository.com/maven2`). If omitted, Maven Central
   (`https://repo1.maven.org/maven2/`) is used as the base. Either way, the full
   artifact path (`groupId/artifactId/version/artifactId-version.jar`) is always
   derived and appended.
@@ -164,7 +164,7 @@ Produces `build/antbuildhelp-<build.version>.jar`.
 
 <getDependency name="csv"
                version="26.1.1"
-               url="https://www.soderer.de/index.php?download=csv.jar"
+               url="https://some-repository.com/index.php?download=csv.jar"
                useWpad="true"
                tlsCertificateFile="zscaler-root.cer" />
 
@@ -184,7 +184,7 @@ Produces `build/antbuildhelp-<build.version>.jar`.
 or
 <getDependency url="https://repo1.maven.org/maven2" groupId="com.sun.mail" artifactId="mailapi" version="RELEASE" />
 or
-<getDependency url="https://soderer.de/maven2" groupId="de.soderer" artifactId="csv" version="26.1.1" />
+<getDependency url="https://some-repository.com/maven2" groupId="de.soderer" artifactId="csv" version="26.1.1" />
 
 <!-- classifier: downloads the "sources" jar alongside the regular one -->
 <getDependency groupId="de.soderer" artifactId="JavaUtilities" version="26.2.51" classifier="sources" />
@@ -201,7 +201,7 @@ or
      gives no filename of its own) instead of "csv-26.1.1.jar". Set to "false" to opt out. -->
 <getDependency name="csv"
                version="26.1.1"
-               url="https://www.soderer.de/index.php?download=csv.jar"
+               url="https://some-repository.com/index.php?download=csv.jar"
                useDownloadFileName="true" />
 ```
 
@@ -219,9 +219,9 @@ literal download url here:
 <getMavenDependency groupId="com.sun.mail" artifactId="mailapi" version="RELEASE" />
 
 <!-- private Maven-layout mirror as repository base, instead of Maven Central -->
-<getMavenDependency repositoryUrl="https://soderer.de/maven2" groupId="de.soderer"
+<getMavenDependency repositoryUrl="https://some-repository.com/maven2" groupId="de.soderer"
                     artifactId="soderer-utilities" version="26.2.53" />
-<getMavenDependency repositoryUrl="https://soderer.de/maven2" groupId="de.soderer"
+<getMavenDependency repositoryUrl="https://some-repository.com/maven2" groupId="de.soderer"
                     artifactId="soderer-utilities" version="26.2.53" classifier="sources" />
 ```
 
@@ -270,7 +270,7 @@ Naming the file as the download/server specifies:
 
 ```
 java -jar antbuildhelp.jar --name=csv --version=26.1.1 --libDir=lib \
-    --url=https://www.soderer.de/index.php?download=csv.jar --useDownloadFileName
+    --url=https://some-repository.com/index.php?download=csv.jar --useDownloadFileName
 ```
 
 Run `--help` for the full option list, including Maven artifact mode details.

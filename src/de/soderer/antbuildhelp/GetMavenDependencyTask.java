@@ -30,9 +30,9 @@ import org.apache.tools.ant.Task;
  * <getMavenDependency groupId="com.sun.mail" artifactId="mailapi" version="RELEASE" />
  *
  * <!-- private Maven-layout mirror as repository base, instead of Maven Central -->
- * <getMavenDependency repositoryUrl="https://soderer.de/maven2" groupId="de.soderer"
+ * <getMavenDependency repositoryUrl="https://some-repository.com/maven2" groupId="de.soderer"
  *                     artifactId="soderer-utilities" version="26.2.53" />
- * <getMavenDependency repositoryUrl="https://soderer.de/maven2" groupId="de.soderer"
+ * <getMavenDependency repositoryUrl="https://some-repository.com/maven2" groupId="de.soderer"
  *                     artifactId="soderer-utilities" version="26.2.53" classifier="sources" />
  * }</pre>
  */
@@ -72,7 +72,7 @@ public class GetMavenDependencyTask extends Task {
 
 	/**
 	 * The Maven-layout repository base url, e.g. a private mirror such as
-	 * "https://soderer.de/maven2". Defaults to Maven Central (repo1.maven.org) if not set.
+	 * "https://some-repository.com/maven2". Defaults to Maven Central (repo1.maven.org) if not set.
 	 */
 	public void setRepositoryUrl(final String repositoryUrl) {
 		this.repositoryUrl = repositoryUrl;

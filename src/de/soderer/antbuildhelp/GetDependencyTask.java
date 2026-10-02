@@ -19,7 +19,7 @@ import org.apache.tools.ant.Task;
  *
  * <getDependency name="RestClient"
  *                version="26.0.82"
- *                url="https://www.soderer.de/index.php?download=RestClient.jar"
+ *                url="https://www.some-repository.com/index.php?download=RestClient.jar"
  *                useWpad="true"
  *                tlsCertificateFile="zscaler-root.cer" />
  *
@@ -41,7 +41,7 @@ import org.apache.tools.ant.Task;
  * or
  * <getDependency url="https://repo1.maven.org/maven2" groupId="com.sun.mail" artifactId="mailapi" version="RELEASE" />
  * or
- * <getDependency url="https://soderer.de/maven2" groupId="de.soderer" artifactId="csv" version="26.1.1" />
+ * <getDependency url="https://some-repository.com/maven2" groupId="de.soderer" artifactId="csv" version="26.1.1" />
  *
  * <!-- classifier: downloads the "sources" jar alongside the regular one -->
  * <getDependency groupId="de.soderer" artifactId="JavaUtilities" version="26.2.51" classifier="sources" />
@@ -61,7 +61,7 @@ import org.apache.tools.ant.Task;
  *      <name>-<version>.jar. -->
  * <getDependency name="csv"
  *                version="26.1.1"
- *                url="https://www.soderer.de/index.php?download=csv.jar"
+ *                url="https://www.some-repository.com/index.php?download=csv.jar"
  *                useDownloadFileName="true" />
  * }</pre>
  */
