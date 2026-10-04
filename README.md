@@ -1,5 +1,7 @@
 # AntBuildHelp
 
+[![Maven Central](https://img.shields.io/maven-central/v/de.soderer/antbuildhelp)](https://central.sonatype.com/artifact/de.soderer/antbuildhelp)
+
 Includes ANT tasks:
 - getDependency
   for general download of dependency jar libs
@@ -17,6 +19,42 @@ Usable both as an ANT task and as a standalone CLI (`java -jar antbuildhelp.jar 
 antbuildhelp.jar is self-contained: the classes of its own dependencies (`json` and
 `proxyautoconfig`) are embedded directly into the jar, so a single jar on the `typedef`
 classpath or on the `java -jar` command line is all that is needed.
+
+## Usage
+
+AntBuildHelp is available on Maven Central. Replace `VERSION` with the version shown in the badge above.
+
+Maven:
+
+```xml
+<dependency>
+	<groupId>de.soderer</groupId>
+	<artifactId>antbuildhelp</artifactId>
+	<version>VERSION</version>
+</dependency>
+```
+
+Gradle:
+
+```groovy
+implementation "de.soderer:antbuildhelp:VERSION"
+```
+
+For use in an ANT build, the jar only has to be present on the `typedef`
+classpath. It can be fetched once with ANT's built-in `get` task, before the
+`typedef` (see "Using the task in another project's build.xml" below):
+
+```xml
+<property name="antbuildhelp.version" value="VERSION" />
+<mkdir dir="lib_build" />
+<get src="https://repo1.maven.org/maven2/de/soderer/antbuildhelp/${antbuildhelp.version}/antbuildhelp-${antbuildhelp.version}.jar"
+     dest="lib_build/antbuildhelp.jar"
+     skipexisting="true" />
+```
+
+Alternatively, download the jar manually from
+[Maven Central](https://central.sonatype.com/artifact/de.soderer/antbuildhelp)
+and put it into `lib_build/`.
 
 ## Package overview
 
