@@ -2,9 +2,6 @@ package de.soderer.antbuildhelp;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.InetSocketAddress;
-import java.net.Proxy;
-import java.net.ProxySelector;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.http.HttpClient;
@@ -18,12 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.security.KeyStore;
 import java.security.MessageDigest;
-import java.security.SecureRandom;
-import java.security.cert.Certificate;
-import java.security.cert.CertificateFactory;
-import java.security.cert.X509Certificate;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -32,13 +24,8 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509TrustManager;
-
-import de.soderer.pac.utilities.ProxyConfiguration;
-import de.soderer.pac.utilities.ProxyConfiguration.ProxyConfigurationType;
+import de.soderer.antbuildhelp.config.ProxyConfig;
+import de.soderer.antbuildhelp.download.HttpClientFactory;
 
 /**
  * Core dependency-resolution logic, independent of Ant: downloads a single dependency jar
@@ -768,16 +755,10 @@ public class DependencyResolver {
 
 	/** Builds an HttpClient configured with this resolver's proxy and TLS-trust settings for targetUrl. */
 	private HttpClient buildHttpClient(final String targetUrl) throws Exception {
-		final HttpClient.Builder httpClientBuilder = HttpClient.newBuilder()
-				.followRedirects(HttpClient.Redirect.NORMAL);
-		final ProxySelector proxySelector = resolveProxySelector(targetUrl);
-		if (proxySelector != null) {
-			httpClientBuilder.proxy(proxySelector);
-		}
-		if (tlsCertificateFile != null) {
-			httpClientBuilder.sslContext(buildSslContextWithAdditionalTrust(tlsCertificateFile));
-		}
-		return httpClientBuilder.build();
+		final ProxyConfig proxyConfig = proxyUrl != null || pacUrl != null || useWpad
+				? new ProxyConfig().withProxyUrl(proxyUrl).withPacUrl(pacUrl).withUseWpad(useWpad)
+				: null;
+		return HttpClientFactory.createHttpClient(targetUrl, proxyConfig, tlsCertificateFile);
 	}
 
 	/** Matches the RFC 5987 extended form, e.g. {@code filename*=UTF-8''some%20file.jar}, preferred when present. */
@@ -910,82 +891,5 @@ public class DependencyResolver {
 			hexString.append(String.format("%02x", digestByte));
 		}
 		return hexString.toString();
-	}
-
-	/**
-	 * Resolves the proxy to use for the given target URL, in precedence order:
-	 * explicit proxyUrl &gt; explicit PAC url &gt; WPAD auto-discovery. Returns null for DIRECT
-	 * (no proxy configured / no proxy needed for this URL).
-	 */
-	private ProxySelector resolveProxySelector(final String targetUrl) throws Exception {
-		if (proxyUrl != null) {
-			final URI proxyUri = URI.create(proxyUrl);
-			return ProxySelector.of(new InetSocketAddress(proxyUri.getHost(), proxyUri.getPort()));
-		} else if (pacUrl != null) {
-			return toProxySelector(resolveProxyViaPacLibrary(ProxyConfigurationType.PACURL, pacUrl, targetUrl));
-		} else if (useWpad) {
-			return toProxySelector(resolveProxyViaPacLibrary(ProxyConfigurationType.WPAD, null, targetUrl));
-		} else {
-			return null;
-		}
-	}
-
-	private static ProxySelector toProxySelector(final Proxy proxy) {
-		if (proxy == null || proxy.type() == Proxy.Type.DIRECT) {
-			return null; // HttpClient defaults to DIRECT when no ProxySelector is set
-		}
-		return ProxySelector.of((InetSocketAddress) proxy.address());
-	}
-
-	/**
-	 * Resolves a single java.net.Proxy for targetUrl via the de.soderer.pac library, whose
-	 * classes are embedded directly into antbuildhelp.jar by the build (no nested jar, no extra
-	 * classloader, no global URLStreamHandlerFactory).
-	 *
-	 * @param proxyConfigurationType PACURL or WPAD
-	 * @param proxyOrPacUrl          the PAC URL for PACURL, or null for WPAD
-	 */
-	private static Proxy resolveProxyViaPacLibrary(final ProxyConfigurationType proxyConfigurationType,
-			final String proxyOrPacUrl, final String targetUrl) throws Exception {
-		final ProxyConfiguration proxyConfiguration = proxyOrPacUrl != null
-				? new ProxyConfiguration(proxyConfigurationType, proxyOrPacUrl)
-				: new ProxyConfiguration(proxyConfigurationType);
-		return proxyConfiguration.getProxy(targetUrl);
-	}
-
-	/**
-	 * Builds an SSLContext that trusts the JVM's default CAs plus the given additional
-	 * certificate (e.g. a corporate MITM proxy root certificate such as Zscaler's).
-	 */
-	private static SSLContext buildSslContextWithAdditionalTrust(final String certificateFilePath) throws Exception {
-		final TrustManagerFactory defaultTrustManagerFactory =
-				TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-		defaultTrustManagerFactory.init((KeyStore) null);
-
-		final KeyStore combinedTrustStore = KeyStore.getInstance(KeyStore.getDefaultType());
-		combinedTrustStore.load(null, null);
-
-		int aliasIndex = 0;
-		for (final TrustManager trustManager : defaultTrustManagerFactory.getTrustManagers()) {
-			if (trustManager instanceof X509TrustManager) {
-				for (final X509Certificate issuer : ((X509TrustManager) trustManager).getAcceptedIssuers()) {
-					combinedTrustStore.setCertificateEntry("default-" + aliasIndex++, issuer);
-				}
-			}
-		}
-
-		try (InputStream certificateInputStream = Files.newInputStream(Paths.get(certificateFilePath))) {
-			final Certificate additionalCertificate =
-					CertificateFactory.getInstance("X.509").generateCertificate(certificateInputStream);
-			combinedTrustStore.setCertificateEntry("additional-trusted-cert", additionalCertificate);
-		}
-
-		final TrustManagerFactory combinedTrustManagerFactory =
-				TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-		combinedTrustManagerFactory.init(combinedTrustStore);
-
-		final SSLContext sslContext = SSLContext.getInstance("TLS");
-		sslContext.init(null, combinedTrustManagerFactory.getTrustManagers(), new SecureRandom());
-		return sslContext;
 	}
 }

@@ -129,7 +129,8 @@ public class GetMavenDependencyTask extends Task {
 					.withLogger(this::log)
 					.resolve();
 		} catch (final Exception e) {
-			throw new BuildException("GetMavenDependencyTask: could not resolve dependency '" + resolveDisplayName() + "'", e);
+			throw new BuildException("GetMavenDependencyTask: could not resolve dependency '" + resolveDisplayName()
+					+ "': " + e.getMessage(), e);
 		}
 	}
 

@@ -1,4 +1,5 @@
 <antlib>
 	<taskdef name="getDependency" classname="de.soderer.antbuildhelp.GetDependencyTask" />
 	<taskdef name="getMavenDependency" classname="de.soderer.antbuildhelp.GetMavenDependencyTask" />
+	<taskdef name="resolveDependencies" classname="de.soderer.antbuildhelp.ResolveDependenciesTask" />
 </antlib>

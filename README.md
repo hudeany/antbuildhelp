@@ -6,18 +6,26 @@ Includes ANT tasks:
 - getMavenDependency
   for download of dependency jar libs from a MAVEN2 repository
 - resolveDependencies
-  for download of dependency jar libs by special index jsons files
+  for download of dependency jar libs by special index jsons files (Versions.json),
+  several dependencies per task call
 
-Each ANT task downloads a single dependency jar into a local Maven-layout-compatible repository
-cache, then copies it into a target `lib/` directory, removing any older version
-of the same dependency found there first.
+`getDependency` and `getMavenDependency` each download a single dependency jar into a local
+Maven-layout-compatible repository cache, then copy it into a target `lib/` directory,
+removing any older version of the same dependency found there first.
 Usable both as an ANT task and as a standalone CLI (`java -jar antbuildhelp.jar ...`).
+
+antbuildhelp.jar is self-contained: the classes of its own dependencies (`json` and
+`proxyautoconfig`) are embedded directly into the jar, so a single jar on the `typedef`
+classpath or on the `java -jar` command line is all that is needed.
 
 ## Package overview
 
 - `DependencyResolver` — the actual resolution logic (download, cache, old-version
-  cleanup, proxy/PACURL/WPAD via the embedded proxyautoconfig library, TLS
-  certificate trust, zip-entry extraction). No dependency on org.apache.tools.ant.*.
+  cleanup, zip-entry extraction, checksum verification). No dependency on
+  org.apache.tools.ant.*.
+- `download.HttpClientFactory` — creates the HTTP clients for all tasks and the
+  CLI, so proxy (proxyUrl/PACURL/WPAD via the embedded proxyautoconfig classes)
+  and TLS certificate trust are handled identically everywhere.
 - `GetDependencyTask` — thin ANT task wrapper (`de.soderer.antbuildhelp.GetDependencyTask`,
   registered as `getDependency` in `antlib.xml`) around `DependencyResolver`. Covers
   plain URL downloads (optionally zip-extracted), GitHub releases, and Maven
@@ -37,13 +45,14 @@ Usable both as an ANT task and as a standalone CLI (`java -jar antbuildhelp.jar 
   given as `--key=value` arguments. Run with `--help` for the full option
   list. (There's no separate CLI mode mirroring `getMavenDependency` — the
   existing `--artifactId` flags already cover that case for the CLI.)
-- `antlib.xml` — registers the `getDependency` and `getMavenDependency` tasks;
-  import both in one line with `<typedef resource="de/soderer/antbuildhelp/antlib.xml" .../>`.
-- `utilities.jarinjarloader` — JarInJar support classes (`rsrc:` URL protocol),
-  used to load the embedded `lib/proxyautoconfig.jar` at runtime without
-  extracting it to a temp file. `JarInJarLoader.main()` itself is not used by
-  either the task or the CLI; kept here in case it's useful for building a fully
-  self-contained multi-jar executable later.
+- `antlib.xml` — registers the `getDependency`, `getMavenDependency` and
+  `resolveDependencies` tasks; import all of them in one line with
+  `<typedef resource="de/soderer/antbuildhelp/antlib.xml" .../>`.
+- `ResolveDependenciesTask` — ANT task (`de.soderer.antbuildhelp.ResolveDependenciesTask`,
+  registered as `resolveDependencies` in `antlib.xml`) resolving several
+  dependencies per call via a Versions.json index file into the local repository
+  (own implementation, not based on `DependencyResolver`, but using the same
+  `HttpClientFactory`).
 
 ## Attributes / CLI options
 
@@ -55,6 +64,11 @@ see below); `groupId` (default `de.soderer`), `libDir` (default
 `tlsCertificateFile`, `zipEntry`, `useDownloadFileName` (optional).
 
 Proxy resolution precedence (set at most one): `proxyUrl` > `pacUrl` > `useWpad`.
+
+TLS certificate validation can never be switched off. For a corporate
+TLS-inspecting proxy (e.g. Zscaler), its root certificate is trusted in
+addition to the JVM's default CAs via `tlsCertificateFile` (X.509, PEM or DER;
+relative paths are resolved against the project's basedir in the ANT tasks).
 
 ### `useDownloadFileName` (default: `true`)
 
@@ -96,9 +110,9 @@ Two things to know:
 
 Setting `artifactId` switches a dependency into Maven artifact mode:
 
-- **`name`** falls back to `artifactId` if not explicitly set. (`name` is still
-  what's used for the local repository cache and `libDir` file naming — it may
-  intentionally differ from `artifactId`, the actual Maven coordinate.)
+- **`name`** falls back to `artifactId` if not explicitly set. In this mode
+  `name` only affects the local repository cache path — the `libDir` file is
+  always named `<artifactId>-<version>[-<classifier>].jar`.
 - **`url`**, if given, is no longer the full download URL — it's treated as the
   Maven-layout repository *base* URL (e.g. a private mirror such as
   `https://some-repository.com/maven2`). If omitted, Maven Central
@@ -116,6 +130,10 @@ Setting `artifactId` switches a dependency into Maven artifact mode:
 - The download is verified against the strongest checksum file available next
   to it, in order `.sha512` > `.sha256` > `.sha1` > `.md5`. A mismatch fails the
   build; if none of the four exist, only a warning is logged (no hard failure).
+  Downloads are written to temporary files first and only moved into the local
+  repository cache after successful verification. A file present in the cache
+  is trusted without being verified again, so the cache never contains
+  unverified or partially downloaded files.
 - **`classifier`** appends the standard Maven classifier to both the download
   and libDir target filename (`<artifactId>-<version>-<classifier>.jar`), e.g.
   `sources` or `javadoc`. If `name` is not explicitly set, it then defaults to
@@ -149,13 +167,36 @@ asset, named exactly like the jar asset plus that extension.
 
 ## Building
 
-`ant.jar` is needed at compile time only (not embedded), via `lib_ant/`.
+Sources follow the Maven standard directory layout (`src/main/java`,
+`src/main/resources`, `src/test/java`).
 
 ```
-ant jar
+ant
 ```
 
-Produces `build/antbuildhelp-<build.version>.jar`.
+The default target downloads all needed libraries, compiles, runs the tests
+and produces in `build/`:
+
+- `antbuildhelp-<build.version>.jar` — including the embedded classes of
+  `json` and `proxyautoconfig` (from `lib/`), signed if
+  `~/git/codeSigning.properties` exists
+- `antbuildhelp-<build.version>-sources.jar`
+- `antbuildhelp-<build.version>-javadoc.jar`
+
+`ant.jar` and `ant-launcher.jar` (`lib_ant/`) and the JUnit console launcher
+(`lib_test/`) are needed at build time only and are not embedded.
+
+`build.version` is written by the BuildAndPublish tool; a plain local `ant` run
+without it falls back to a placeholder version.
+
+### Tests
+
+JUnit 5 tests for the ANT tasks run against a local HTTP/HTTPS server
+(`com.sun.net.httpserver` from the JDK), so they need no internet access. The
+self-signed certificate for the HTTPS tests is generated at test runtime with
+the JDK's `keytool`. The local repository cache is redirected into a temporary
+directory, the real `~/.m2/repository` is never touched. A failing test stops
+the build before the jar gets signed.
 
 ## Using the task in another project's build.xml
 
@@ -232,6 +273,34 @@ is the same `DependencyResolver` underneath, just without the attributes
 that only make sense for plain-URL downloads (`zipEntry`,
 `useDownloadFileName`, the `{version}` placeholder).
 
+## Using `resolveDependencies`
+
+Registered in `antlib.xml` like the other tasks, so the same `typedef` makes it
+available:
+
+```xml
+<typedef resource="de/soderer/antbuildhelp/antlib.xml" classpath="lib_build/antbuildhelp.jar" />
+
+<resolveDependencies repositoryRoot="${user.home}/.m2/repository"
+                     groupId="de.soderer"
+                     versionsJsonUrl="https://www.soderer.de/index.php?download=Versions.json"
+                     username="myuser"
+                     password="mypassword"
+                     useWpad="true"
+                     tlsCertificateFile="zscaler-root.cer">
+    <dependency name="RestClient" version="latest" />
+    <dependency name="SomeThirdPartyLib" version="1.2.3"
+                url="https://example.com/libs/{name}-{version}.jar"
+                tlsCertificateFile="example-com-root.cer" />
+</resolveDependencies>
+```
+
+The task attributes `proxyUrl`, `pacUrl`, `useWpad` and `tlsCertificateFile`
+apply to the Versions.json request and to all downloads. A `<dependency>` may
+override `tlsCertificateFile` for its own download. The former attribute
+`tlsCertCheck`, which switched off certificate validation entirely, no longer
+exists.
+
 ## Using the CLI
 
 ```
@@ -279,5 +348,6 @@ Run `--help` for the full option list, including Maven artifact mode details.
 
 - No dependencies file (YAML/JSON/XML) support yet — one `<getDependency>` call
   (or one CLI invocation) per library.
-- `resolveProxyViaEmbeddedPacLibrary()` reloads the nested proxyautoconfig
-  classloader on every call (no caching across multiple calls in the same run).
+- A `Content-Disposition`-derived file name is not remembered in the local
+  repository cache (see `useDownloadFileName` above), so a later project
+  getting the same dependency from the cache may name the file differently.

@@ -10,7 +10,7 @@ public class DependencyEntry {
 	private String version; // fixed version string, or "latest"/"current"
 	private String downloadUrlTemplate; // may contain {name}, {version}, {baseUrl}, <username>, <password>, ...
 	private ProxyConfig proxyConfig;
-	private boolean tlsCertCheckEnabled = true;
+	private String tlsCertificateFile; // additionally trusted certificate (e.g. corporate TLS-inspecting proxy), null for JVM default CAs only
 
 	public String getName() {
 		return name;
@@ -70,16 +70,17 @@ public class DependencyEntry {
 		return this;
 	}
 
-	public boolean isTlsCertCheckEnabled() {
-		return tlsCertCheckEnabled;
+	/** Path of an additionally trusted X.509 certificate file, or null to trust the JVM's default CAs only */
+	public String getTlsCertificateFile() {
+		return tlsCertificateFile;
 	}
 
-	public void setTlsCertCheckEnabled(final boolean tlsCertCheckEnabled) {
-		this.tlsCertCheckEnabled = tlsCertCheckEnabled;
+	public void setTlsCertificateFile(final String tlsCertificateFile) {
+		this.tlsCertificateFile = tlsCertificateFile;
 	}
 
-	public DependencyEntry withTlsCertCheckEnabled(final boolean tlsCertCheckEnabledParam) {
-		setTlsCertCheckEnabled(tlsCertCheckEnabledParam);
+	public DependencyEntry withTlsCertificateFile(final String tlsCertificateFileParam) {
+		setTlsCertificateFile(tlsCertificateFileParam);
 		return this;
 	}
 }

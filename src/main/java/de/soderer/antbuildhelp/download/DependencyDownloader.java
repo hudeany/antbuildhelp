@@ -6,8 +6,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -42,7 +44,7 @@ public class DependencyDownloader {
 	 *
 	 * @return the path of the jar in the local repository
 	 */
-	public Path resolveAndDownload(final DependencyEntry dependencyEntry) throws IOException, InterruptedException {
+	public Path resolveAndDownload(final DependencyEntry dependencyEntry) throws Exception {
 		final ResolvedDependency resolvedDependency = versionResolver.resolve(dependencyEntry);
 
 		final Path targetPath = repositoryPathBuilder.buildJarPath(
@@ -63,32 +65,42 @@ public class DependencyDownloader {
 		final String downloadUrl = UrlTemplateResolver.resolve(
 				resolvedDependency.getDownloadUrlTemplate(), placeholderValues);
 
-		downloadToFile(downloadUrl, targetPath, dependencyEntry.isTlsCertCheckEnabled());
+		downloadToFile(downloadUrl, targetPath, dependencyEntry);
 		return targetPath;
 	}
 
-	private static void downloadToFile(final String downloadUrl, final Path targetPath,
-			final boolean tlsCertCheckEnabled) throws IOException, InterruptedException {
+	/**
+	 * Downloads into a temporary file next to the target first and moves it into place only when
+	 * complete, because an existing file in the local repository is trusted on the next run: an
+	 * interrupted download must never leave a partial jar there.
+	 */
+	private static void downloadToFile(final String downloadUrl, final Path targetPath, final DependencyEntry dependencyEntry) throws Exception {
 		Files.createDirectories(targetPath.getParent());
 
-		final HttpClient.Builder httpClientBuilder = HttpClient.newBuilder();
-		if (!tlsCertCheckEnabled) {
-			// NOTE: disables certificate validation entirely, intended for corporate MITM proxies (e.g. Zscaler).
-			httpClientBuilder.sslContext(TrustAllSslContextFactory.create());
-		}
-		final HttpClient httpClient = httpClientBuilder.build();
+		final HttpClient httpClient = HttpClientFactory.createHttpClient(downloadUrl, dependencyEntry.getProxyConfig(), dependencyEntry.getTlsCertificateFile());
 
 		final HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(downloadUrl)).GET().build();
-		final HttpResponse<InputStream> httpResponse = httpClient.send(httpRequest,
-				HttpResponse.BodyHandlers.ofInputStream());
+		final HttpResponse<InputStream> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
 
 		if (httpResponse.statusCode() != 200) {
+			httpResponse.body().close();
+			// The url may contain credentials, so only the dependency name is reported
 			throw new IOException("Download failed with HTTP status " + httpResponse.statusCode()
-					+ " for URL: " + downloadUrl);
+					+ " for dependency '" + dependencyEntry.getName() + "'");
 		}
 
-		try (InputStream inputStream = httpResponse.body()) {
-			Files.copy(inputStream, targetPath);
+		final Path tempFile = Files.createTempFile(targetPath.getParent(), ".download-", ".tmp");
+		try {
+			try (InputStream inputStream = httpResponse.body()) {
+				Files.copy(inputStream, tempFile, StandardCopyOption.REPLACE_EXISTING);
+			}
+			try {
+				Files.move(tempFile, targetPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+			} catch (@SuppressWarnings("unused") final AtomicMoveNotSupportedException e) {
+				Files.move(tempFile, targetPath, StandardCopyOption.REPLACE_EXISTING);
+			}
+		} finally {
+			Files.deleteIfExists(tempFile);
 		}
 	}
 }

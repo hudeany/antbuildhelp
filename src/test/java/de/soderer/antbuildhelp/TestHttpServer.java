@@ -10,8 +10,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.net.ssl.SSLContext;
+
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpsConfigurator;
+import com.sun.net.httpserver.HttpsServer;
 
 /**
  * Minimal local HTTP server for the Ant task tests, based on the JDK's built-in
@@ -20,6 +24,7 @@ import com.sun.net.httpserver.HttpServer;
  * Responses are registered per raw request path including the query string (e.g.
  * "/download?id=42"). Unregistered paths are answered with HTTP 404. GET requests are counted per
  * path, so tests can check whether a file was actually downloaded or taken from the local cache.
+ * With an SSLContext the server speaks HTTPS instead of plain HTTP.
  */
 class TestHttpServer implements AutoCloseable {
 
@@ -36,18 +41,33 @@ class TestHttpServer implements AutoCloseable {
 	}
 
 	private final HttpServer httpServer;
+	private final String scheme;
 	private final Map<String, Response> responses = new ConcurrentHashMap<>();
 	private final Map<String, AtomicInteger> getRequestCounts = new ConcurrentHashMap<>();
 
 	TestHttpServer() throws IOException {
-		httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+		this(null);
+	}
+
+	/** HTTPS server using the given server-side SSLContext, or plain HTTP if null */
+	TestHttpServer(final SSLContext sslContext) throws IOException {
+		final InetSocketAddress address = new InetSocketAddress(InetAddress.getLoopbackAddress(), 0);
+		if (sslContext == null) {
+			httpServer = HttpServer.create(address, 0);
+			scheme = "http";
+		} else {
+			final HttpsServer httpsServer = HttpsServer.create(address, 0);
+			httpsServer.setHttpsConfigurator(new HttpsConfigurator(sslContext));
+			httpServer = httpsServer;
+			scheme = "https";
+		}
 		httpServer.createContext("/", this::handle);
 		httpServer.start();
 	}
 
 	/** Base url without trailing slash, e.g. "http://127.0.0.1:54321" */
 	String getBaseUrl() {
-		return "http://" + httpServer.getAddress().getHostString() + ":" + httpServer.getAddress().getPort();
+		return scheme + "://" + httpServer.getAddress().getHostString() + ":" + httpServer.getAddress().getPort();
 	}
 
 	void addFile(final String pathAndQuery, final byte[] body) {
