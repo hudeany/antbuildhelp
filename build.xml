@@ -2,7 +2,7 @@
 <project default="cleanup_after" basedir=".">
 	<!-- Dependencies START -->
 	<property name="json.version" value="26.2.6" />
-	<property name="proxyautoconfig.version" value="26.1.2" />
+	<property name="proxyautoconfig.version" value="26.1.3" />
 	
 	<!-- The classes of all dependencies in "lib" are embedded into the resulting AntBuildHelp.jar, so its
 	     Maven POM must not list them as dependencies.
