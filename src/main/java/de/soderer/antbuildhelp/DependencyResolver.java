@@ -6,14 +6,13 @@ import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.URI;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.net.URLDecoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -38,7 +37,8 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
-import de.soderer.antbuildhelp.utilities.jarinjarloader.JarInJarURLStreamHandlerFactory;
+import de.soderer.pac.utilities.ProxyConfiguration;
+import de.soderer.pac.utilities.ProxyConfiguration.ProxyConfigurationType;
 
 /**
  * Core dependency-resolution logic, independent of Ant: downloads a single dependency jar
@@ -54,10 +54,6 @@ import de.soderer.antbuildhelp.utilities.jarinjarloader.JarInJarURLStreamHandler
  * additionally returns this for chained construction.
  */
 public class DependencyResolver {
-
-	private static final String PAC_LIBRARY_NESTED_JAR_PATH = "lib/proxyautoconfig.jar";
-	private static final String PROXY_CONFIGURATION_CLASS = "de.soderer.pac.utilities.ProxyConfiguration";
-	private static final String PROXY_CONFIGURATION_TYPE_CLASS = PROXY_CONFIGURATION_CLASS + "$ProxyConfigurationType";
 
 	/**
 	 * Default for {@link #setUseDownloadFileName}. True: callers (Ant task, CLI) that don't set
@@ -84,9 +80,6 @@ public class DependencyResolver {
 		CHECKSUM_EXTENSION_TO_DIGEST_ALGORITHM.put("sha1", "SHA-1");
 		CHECKSUM_EXTENSION_TO_DIGEST_ALGORITHM.put("md5", "MD5");
 	}
-
-	/** Guards java.net.URL#setURLStreamHandlerFactory(...), which may only be called once per JVM. */
-	private static volatile boolean rsrcProtocolRegistered = false;
 
 	private String name;
 	private String version;
@@ -449,7 +442,15 @@ public class DependencyResolver {
 
 		final Path targetJarPath = libDir.resolve(buildTargetFileName());
 		if (!Files.isRegularFile(targetJarPath)) {
-			Files.copy(repositoryJarPath, targetJarPath);
+			// Copied via a temporary file, so an interrupted copy never leaves a partial jar that
+			// would be taken as already present on the next run
+			final Path tempTargetFile = Files.createTempFile(libDir, ".copy-", ".tmp");
+			try {
+				Files.copy(repositoryJarPath, tempTargetFile, StandardCopyOption.REPLACE_EXISTING);
+				moveIntoPlace(tempTargetFile, targetJarPath);
+			} finally {
+				Files.deleteIfExists(tempTargetFile);
+			}
 			logger.accept("-> " + targetJarPath);
 		} else {
 			logger.accept(name + " " + version + " already present in " + libDir);
@@ -683,25 +684,46 @@ public class DependencyResolver {
 	 * Downloads the given URL into the local repository. If zipEntry is set, the download is
 	 * treated as a zip archive and only the given entry is extracted as the resulting jar
 	 * (e.g. swt.jar out of an Eclipse SWT distribution zip) - the temp zip is discarded afterward.
+	 *
+	 * Everything is written to temporary files next to the final cache entry first and only
+	 * moved into place after a successful checksum verification (and zip extraction). This is
+	 * essential, because {@link #resolve()} trusts an existing cache entry without verifying it
+	 * again: a tampered or partially downloaded file left in the cache would otherwise be used
+	 * silently on the next run.
 	 */
 	private void resolveIntoRepository(final String downloadUrl, final Path repositoryJarPath) throws Exception {
 		final boolean checksumVerificationEnabled = artifactId != null || isGithubReleaseUrl(downloadUrl);
-		if (zipEntry != null) {
-			final Path tempZipFile = Files.createTempFile("antbuildhelp-download-", ".zip");
-			try {
-				downloadToFile(downloadUrl, tempZipFile);
-				if (checksumVerificationEnabled) {
-					verifyChecksum(downloadUrl, tempZipFile);
-				}
-				extractZipEntry(tempZipFile, zipEntry, repositoryJarPath);
-			} finally {
-				Files.deleteIfExists(tempZipFile);
-			}
-		} else {
-			downloadToFile(downloadUrl, repositoryJarPath);
+		final Path repositoryDirectory = repositoryJarPath.getParent();
+		Files.createDirectories(repositoryDirectory);
+
+		final Path tempDownloadFile = Files.createTempFile(repositoryDirectory, ".download-", ".tmp");
+		Path tempExtractedFile = null;
+		try {
+			downloadToFile(downloadUrl, tempDownloadFile);
 			if (checksumVerificationEnabled) {
-				verifyChecksum(downloadUrl, repositoryJarPath);
+				verifyChecksum(downloadUrl, tempDownloadFile);
 			}
+			if (zipEntry != null) {
+				tempExtractedFile = Files.createTempFile(repositoryDirectory, ".extract-", ".tmp");
+				extractZipEntry(tempDownloadFile, zipEntry, tempExtractedFile);
+				moveIntoPlace(tempExtractedFile, repositoryJarPath);
+			} else {
+				moveIntoPlace(tempDownloadFile, repositoryJarPath);
+			}
+		} finally {
+			Files.deleteIfExists(tempDownloadFile);
+			if (tempExtractedFile != null) {
+				Files.deleteIfExists(tempExtractedFile);
+			}
+		}
+	}
+
+	/** Moves a completely written file to its final path, atomically if the file system supports it. */
+	private static void moveIntoPlace(final Path sourceFile, final Path targetFile) throws IOException {
+		try {
+			Files.move(sourceFile, targetFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		} catch (@SuppressWarnings("unused") final AtomicMoveNotSupportedException e) {
+			Files.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
 		}
 	}
 
@@ -900,9 +922,9 @@ public class DependencyResolver {
 			final URI proxyUri = URI.create(proxyUrl);
 			return ProxySelector.of(new InetSocketAddress(proxyUri.getHost(), proxyUri.getPort()));
 		} else if (pacUrl != null) {
-			return toProxySelector(resolveProxyViaEmbeddedPacLibrary("PACURL", pacUrl, targetUrl));
+			return toProxySelector(resolveProxyViaPacLibrary(ProxyConfigurationType.PACURL, pacUrl, targetUrl));
 		} else if (useWpad) {
-			return toProxySelector(resolveProxyViaEmbeddedPacLibrary("WPAD", null, targetUrl));
+			return toProxySelector(resolveProxyViaPacLibrary(ProxyConfigurationType.WPAD, null, targetUrl));
 		} else {
 			return null;
 		}
@@ -916,51 +938,19 @@ public class DependencyResolver {
 	}
 
 	/**
-	 * Resolves a single java.net.Proxy for targetUrl via the embedded de.soderer.pac library,
-	 * using de.soderer.pac.utilities.ProxyConfiguration(type[, proxyOrPacUrl]).getProxy(targetUrl).
+	 * Resolves a single java.net.Proxy for targetUrl via the de.soderer.pac library, whose
+	 * classes are embedded directly into antbuildhelp.jar by the build (no nested jar, no extra
+	 * classloader, no global URLStreamHandlerFactory).
 	 *
-	 * @param proxyConfigurationTypeName "PACURL" or "WPAD" (matches ProxyConfigurationType enum names)
-	 * @param proxyOrPacUrl              the PAC URL for PACURL, or null for WPAD
+	 * @param proxyConfigurationType PACURL or WPAD
+	 * @param proxyOrPacUrl          the PAC URL for PACURL, or null for WPAD
 	 */
-	private static Proxy resolveProxyViaEmbeddedPacLibrary(final String proxyConfigurationTypeName,
+	private static Proxy resolveProxyViaPacLibrary(final ProxyConfigurationType proxyConfigurationType,
 			final String proxyOrPacUrl, final String targetUrl) throws Exception {
-		try (URLClassLoader nestedClassLoader = loadNestedJar(PAC_LIBRARY_NESTED_JAR_PATH)) {
-			final Class<?> typeClass = Class.forName(PROXY_CONFIGURATION_TYPE_CLASS, true, nestedClassLoader);
-			final Object typeValue = typeClass.getMethod("valueOf", String.class)
-					.invoke(null, proxyConfigurationTypeName);
-
-			final Class<?> configClass = Class.forName(PROXY_CONFIGURATION_CLASS, true, nestedClassLoader);
-			final Object configInstance = proxyOrPacUrl != null
-					? configClass.getConstructor(typeClass, String.class).newInstance(typeValue, proxyOrPacUrl)
-					: configClass.getConstructor(typeClass).newInstance(typeValue);
-
-			return (Proxy) configClass.getMethod("getProxy", String.class).invoke(configInstance, targetUrl);
-		}
-	}
-
-	/**
-	 * Loads a jar that is embedded as a plain resource inside antbuildhelp.jar (jar-in-jar),
-	 * without extracting it to a temp file: builds a "jar:rsrc:<path>!/" URL that reads the
-	 * nested jar's bytes directly out of the running antbuildhelp.jar via the classloader.
-	 */
-	private static URLClassLoader loadNestedJar(final String nestedJarResourcePath) throws IOException {
-		ensureRsrcProtocolRegistered();
-		final URL nestedJarUrl = URI.create("jar:rsrc:" + nestedJarResourcePath + "!/").toURL();
-		return new URLClassLoader(new URL[] { nestedJarUrl }, DependencyResolver.class.getClassLoader());
-	}
-
-	private static synchronized void ensureRsrcProtocolRegistered() {
-		if (!rsrcProtocolRegistered) {
-			try {
-				URL.setURLStreamHandlerFactory(
-						new JarInJarURLStreamHandlerFactory(DependencyResolver.class.getClassLoader()));
-			} catch (@SuppressWarnings("unused") final Error alreadyRegisteredError) {
-				// Some other component already installed a URLStreamHandlerFactory in this JVM.
-				// If it does not handle "rsrc:" itself, nested-jar loading will fail below with a
-				// clear MalformedURLException/UnsupportedOperationException rather than silently.
-			}
-			rsrcProtocolRegistered = true;
-		}
+		final ProxyConfiguration proxyConfiguration = proxyOrPacUrl != null
+				? new ProxyConfiguration(proxyConfigurationType, proxyOrPacUrl)
+				: new ProxyConfiguration(proxyConfigurationType);
+		return proxyConfiguration.getProxy(targetUrl);
 	}
 
 	/**
