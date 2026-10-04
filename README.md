@@ -24,7 +24,50 @@ classpath or on the `java -jar` command line is all that is needed.
 
 AntBuildHelp is available on Maven Central. Replace `VERSION` with the version shown in the badge above.
 
-Maven:
+Typical use in a project's `build.xml`: fetch antbuildhelp.jar once with ANT's
+built-in `get` task and register the tasks via `typedef`, both at top level
+(outside any target), then download the project's dependencies within a target
+with `getMavenDependency` (Maven artifacts) or `getDependency` (any other
+download url):
+
+```xml
+<project name="MyProject" default="build" basedir=".">
+	<!-- Top-level tasks run in file order while the build file is parsed, before
+	     any target. So "get" must come before "typedef", which needs the jar. -->
+	<property name="antbuildhelp.version" value="VERSION" />
+	<mkdir dir="lib_build" />
+	<get src="https://repo1.maven.org/maven2/de/soderer/antbuildhelp/${antbuildhelp.version}/antbuildhelp-${antbuildhelp.version}.jar"
+	     dest="lib_build/antbuildhelp.jar"
+	     skipexisting="true" />
+	<typedef resource="de/soderer/antbuildhelp/antlib.xml" classpath="lib_build/antbuildhelp.jar" />
+
+	<target name="dependencies">
+		<!-- Maven artifact from Maven Central, checksum-verified, always the latest release -->
+		<getMavenDependency groupId="com.sun.mail" artifactId="mailapi" version="RELEASE" />
+
+		<!-- any other download url, e.g. a jar extracted from a zip archive -->
+		<getDependency name="swt-win"
+		               version="4.38-win32-win32-x86_64"
+		               groupId="org.eclipse.swt"
+		               url="https://archive.eclipse.org/eclipse/downloads/drops4/R-4.38-202512010920/swt-4.38-win32-win32-x86_64.zip"
+		               zipEntry="swt.jar" />
+	</target>
+
+	<target name="build" depends="dependencies">
+		...
+	</target>
+</project>
+```
+
+Both tasks place the jar into `lib/` of the project and remove older versions
+of the same dependency found there. All attributes and further examples are
+described below.
+
+Alternatively, download antbuildhelp.jar manually from
+[Maven Central](https://central.sonatype.com/artifact/de.soderer/antbuildhelp)
+and put it into `lib_build/`.
+
+As a Maven dependency (e.g. for using `DependencyResolver` from Java code):
 
 ```xml
 <dependency>
@@ -39,22 +82,6 @@ Gradle:
 ```groovy
 implementation "de.soderer:antbuildhelp:VERSION"
 ```
-
-For use in an ANT build, the jar only has to be present on the `typedef`
-classpath. It can be fetched once with ANT's built-in `get` task, before the
-`typedef` (see "Using the task in another project's build.xml" below):
-
-```xml
-<property name="antbuildhelp.version" value="VERSION" />
-<mkdir dir="lib_build" />
-<get src="https://repo1.maven.org/maven2/de/soderer/antbuildhelp/${antbuildhelp.version}/antbuildhelp-${antbuildhelp.version}.jar"
-     dest="lib_build/antbuildhelp.jar"
-     skipexisting="true" />
-```
-
-Alternatively, download the jar manually from
-[Maven Central](https://central.sonatype.com/artifact/de.soderer/antbuildhelp)
-and put it into `lib_build/`.
 
 ## Package overview
 
