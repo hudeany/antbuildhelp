@@ -53,62 +53,150 @@ import de.soderer.antbuildhelp.versions.VersionsJson;
  */
 public class ResolveDependenciesTask extends Task {
 
+	/** Value of the "repositoryRoot" attribute, default: "~/.m2/repository" */
 	private String repositoryRoot = System.getProperty("user.home") + "/.m2/repository";
+
+	/** Value of the "groupId" attribute, default: "de.soderer" */
 	private String groupId = "de.soderer";
+
+	/** Value of the "versionsJsonUrl" attribute */
 	private String versionsJsonUrl;
+
+	/** Value of the "username" attribute */
 	private String username;
+
+	/** Value of the "password" attribute */
 	private String password;
+
+	/** Value of the "proxyUrl" attribute */
 	private String proxyUrl;
+
+	/** Value of the "pacUrl" attribute */
 	private String pacUrl;
+
+	/** Value of the "useWpad" attribute */
 	private boolean useWpad;
+
+	/** Value of the "tlsCertificateFile" attribute */
 	private String tlsCertificateFile;
 
+	/** Nested {@code <dependency>} elements, in build.xml order */
 	private final List<DependencyElement> dependencyElements = new ArrayList<>();
 
+	/**
+	 * Creates the task; Ant configures it via the attribute setters and nested elements afterwards.
+	 */
+	public ResolveDependenciesTask() {
+		// Configured by Ant via the setters
+	}
+
+	/**
+	 * Sets the root directory of the local repository. Defaults to "~/.m2/repository".
+	 *
+	 * @param repositoryRoot the repository root directory
+	 */
 	public void setRepositoryRoot(final String repositoryRoot) {
 		this.repositoryRoot = repositoryRoot;
 	}
 
+	/**
+	 * Sets the groupId used for the local repository path of all dependencies. Defaults to
+	 * "de.soderer".
+	 *
+	 * @param groupId the groupId
+	 */
 	public void setGroupId(final String groupId) {
 		this.groupId = groupId;
 	}
 
+	/**
+	 * Sets the url of the central Versions.json, needed for dependencies with version
+	 * "latest"/"current" (the default of nested elements).
+	 *
+	 * @param versionsJsonUrl the Versions.json url
+	 */
 	public void setVersionsJsonUrl(final String versionsJsonUrl) {
 		this.versionsJsonUrl = versionsJsonUrl;
 	}
 
+	/**
+	 * Sets the user name substituted for the {username}/&lt;username&gt; url placeholders. It is
+	 * percent-encoded automatically, so it must be given raw, not url-encoded.
+	 *
+	 * @param username the user name
+	 */
 	public void setUsername(final String username) {
 		this.username = username;
 	}
 
+	/**
+	 * Sets the password substituted for the {password}/&lt;password&gt; url placeholders. It is
+	 * percent-encoded automatically, so it must be given raw, not url-encoded (special characters
+	 * like "&amp;", "#" or "@" are safe).
+	 * Only used if a username is set.
+	 *
+	 * @param password the password
+	 */
 	public void setPassword(final String password) {
 		this.password = password;
 	}
 
+	/**
+	 * Sets a direct proxy, e.g. "http://proxy.example.com:8080". Takes precedence over
+	 * pacUrl and useWpad.
+	 *
+	 * @param proxyUrl the proxy url
+	 */
 	public void setProxyUrl(final String proxyUrl) {
 		this.proxyUrl = proxyUrl;
 	}
 
+	/**
+	 * Sets the url of a PAC script that decides the proxy per request. Takes precedence over
+	 * useWpad.
+	 *
+	 * @param pacUrl the PAC script url
+	 */
 	public void setPacUrl(final String pacUrl) {
 		this.pacUrl = pacUrl;
 	}
 
+	/**
+	 * Sets whether the PAC script is auto-detected via WPAD.
+	 *
+	 * @param useWpad true to use WPAD
+	 */
 	public void setUseWpad(final boolean useWpad) {
 		this.useWpad = useWpad;
 	}
 
-	/** Additionally trusted certificate for all requests of this task, relative paths are resolved against the project's basedir */
+	/**
+	 * Sets an additionally trusted certificate for all requests of this task. Relative paths are
+	 * resolved against the project's basedir.
+	 *
+	 * @param tlsCertificateFile path of the certificate file (PEM or DER)
+	 */
 	public void setTlsCertificateFile(final String tlsCertificateFile) {
 		this.tlsCertificateFile = tlsCertificateFile;
 	}
 
-	/** Called by Ant for each nested <dependency> element. */
+	/**
+	 * Called by Ant for each nested {@code <dependency>} element.
+	 *
+	 * @return the new, still unconfigured element
+	 */
 	public DependencyElement createDependency() {
 		final DependencyElement dependencyElement = new DependencyElement();
 		dependencyElements.add(dependencyElement);
 		return dependencyElement;
 	}
 
+	/**
+	 * Resolves all nested dependencies into the local repository, loading the central
+	 * Versions.json first if configured.
+	 *
+	 * @throws BuildException if the Versions.json or any dependency cannot be resolved
+	 */
 	@Override
 	public void execute() throws BuildException {
 		try {
@@ -130,6 +218,9 @@ public class ResolveDependenciesTask extends Task {
 					versionResolver, repositoryPathBuilder, credentialsProvider, groupId);
 
 			for (final DependencyElement dependencyElement : dependencyElements) {
+				if (dependencyElement.name == null) {
+					throw new BuildException("Nested <dependency> element requires 'name' to be set");
+				}
 				final DependencyEntry dependencyEntry = new DependencyEntry()
 						.withName(dependencyElement.name)
 						.withVersion(dependencyElement.version)
@@ -148,6 +239,15 @@ public class ResolveDependenciesTask extends Task {
 		}
 	}
 
+	/**
+	 * Fetches the Versions.json content.
+	 *
+	 * @param url                    the Versions.json url
+	 * @param proxyConfig            proxy settings, or null for a direct connection
+	 * @param tlsCertificateFilePath additionally trusted certificate file, or null
+	 * @return the response body
+	 * @throws Exception if the request fails or the server does not answer with HTTP 200
+	 */
 	private static String fetchTextContent(final String url, final ProxyConfig proxyConfig, final String tlsCertificateFilePath) throws Exception {
 		final HttpClient httpClient = HttpClientFactory.createHttpClient(url, proxyConfig, tlsCertificateFilePath);
 		final HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(url)).GET().build();
@@ -158,7 +258,12 @@ public class ResolveDependenciesTask extends Task {
 		return httpResponse.body();
 	}
 
-	/** Resolves a path given in the build.xml against the project's basedir when relative; null stays null */
+	/**
+	 * Resolves a path given in the build.xml against the project's basedir when relative.
+	 *
+	 * @param filePath the path, may be null
+	 * @return the resolved path, or null if filePath is null
+	 */
 	private String resolveAgainstBaseDir(final String filePath) {
 		if (filePath == null) {
 			return null;
@@ -167,27 +272,65 @@ public class ResolveDependenciesTask extends Task {
 		return (path.isAbsolute() ? path : getProject().getBaseDir().toPath().resolve(path)).toString();
 	}
 
-	/** Nested <dependency> element, as configured by Ant via reflection (setters). */
+	/**
+	 * Nested {@code <dependency>} element, as configured by Ant via reflection (setters).
+	 */
 	public static class DependencyElement {
 
+		/** Value of the "name" attribute */
 		private String name;
+
+		/** Value of the "version" attribute, default: "latest" */
 		private String version = "latest";
+
+		/** Value of the "url" attribute */
 		private String url;
+
+		/** Value of the "tlsCertificateFile" attribute */
 		private String tlsCertificateFile;
 
+		/**
+		 * Creates the element; Ant configures it via the attribute setters afterwards.
+		 */
+		public DependencyElement() {
+			// Configured by Ant via the setters
+		}
+
+		/**
+		 * Sets the dependency name, used as key into the Versions.json and for the repository path.
+		 * Required.
+		 *
+		 * @param name the dependency name
+		 */
 		public void setName(final String name) {
 			this.name = name;
 		}
 
+		/**
+		 * Sets the version: a fixed version, or "latest"/"current" (the default) to use the
+		 * version from the Versions.json.
+		 *
+		 * @param version the version
+		 */
 		public void setVersion(final String version) {
 			this.version = version;
 		}
 
+		/**
+		 * Sets the download url template, with optional {name}/{version}/{username}/{password}
+		 * placeholders. Defaults to the Versions.json entry's download url for the latest version.
+		 *
+		 * @param url the download url template
+		 */
 		public void setUrl(final String url) {
 			this.url = url;
 		}
 
-		/** Overrides the task's tlsCertificateFile for this dependency only */
+		/**
+		 * Overrides the task's tlsCertificateFile for this dependency only.
+		 *
+		 * @param tlsCertificateFile path of the certificate file (PEM or DER)
+		 */
 		public void setTlsCertificateFile(final String tlsCertificateFile) {
 			this.tlsCertificateFile = tlsCertificateFile;
 		}

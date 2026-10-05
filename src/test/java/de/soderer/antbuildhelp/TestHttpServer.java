@@ -78,6 +78,11 @@ class TestHttpServer implements AutoCloseable {
 		responses.put(pathAndQuery, new Response(200, body, new LinkedHashMap<>(headers)));
 	}
 
+	/** Registers an empty response with the given HTTP status code, e.g. 503 */
+	void addStatus(final String pathAndQuery, final int statusCode) {
+		responses.put(pathAndQuery, new Response(statusCode, new byte[0], Collections.emptyMap()));
+	}
+
 	void addText(final String pathAndQuery, final String text) {
 		addFile(pathAndQuery, text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 	}

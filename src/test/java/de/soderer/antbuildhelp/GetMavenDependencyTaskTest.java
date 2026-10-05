@@ -216,4 +216,36 @@ class GetMavenDependencyTaskTest {
 		assertArrayEquals(jarBytes, Files.readAllBytes(libFile));
 		assertEquals(1, testHttpServer.getGetRequestCount(artifactPath), "Jar must be downloaded only once");
 	}
+
+	@Test
+	void checksumFileWithTabSeparatedFileNameIsAccepted() throws Exception {
+		final byte[] jarBytes = AntTestUtilities.createJarBytes("tablib 1.0.0");
+		final String artifactPath = TestHttpServer.getMavenArtifactPath(REPOSITORY_PATH, "de.soderer", "tablib", "1.0.0", null);
+		testHttpServer.addFile(artifactPath, jarBytes);
+		testHttpServer.addText(artifactPath + ".sha512", AntTestUtilities.checksum(jarBytes, "sha512") + "\ttablib-1.0.0.jar\n");
+
+		createTask("de.soderer", "tablib", "1.0.0").execute();
+
+		assertArrayEquals(jarBytes, Files.readAllBytes(baseDir.resolve("lib").resolve("tablib-1.0.0.jar")));
+	}
+
+	@Test
+	void checksumFileWithoutHashFails() {
+		final byte[] jarBytes = AntTestUtilities.createJarBytes("nohashlib 1.0.0");
+		final String artifactPath = TestHttpServer.getMavenArtifactPath(REPOSITORY_PATH, "de.soderer", "nohashlib", "1.0.0", null);
+		testHttpServer.addFile(artifactPath, jarBytes);
+		testHttpServer.addText(artifactPath + ".sha512", "\n");
+
+		final BuildException buildException = assertThrows(BuildException.class, createTask("de.soderer", "nohashlib", "1.0.0")::execute);
+		assertTrue(buildException.getMessage().contains("no hex hash"), buildException.getMessage());
+		assertFalse(Files.exists(baseDir.resolve("lib").resolve("nohashlib-1.0.0.jar")));
+	}
+
+	@Test
+	void unavailableMavenMetadataReportsHttpStatus() {
+		testHttpServer.addStatus(REPOSITORY_PATH + "/de/soderer/busylib/maven-metadata.xml", 503);
+
+		final BuildException buildException = assertThrows(BuildException.class, createTask("de.soderer", "busylib", "RELEASE")::execute);
+		assertTrue(buildException.getMessage().contains("503"), buildException.getMessage());
+	}
 }

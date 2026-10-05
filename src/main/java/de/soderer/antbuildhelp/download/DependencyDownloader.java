@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 import de.soderer.antbuildhelp.config.DependencyEntry;
@@ -24,11 +25,28 @@ import de.soderer.antbuildhelp.versions.VersionResolver.ResolvedDependency;
  */
 public class DependencyDownloader {
 
+	/** Resolves the effective version and url template of each dependency */
 	private final VersionResolver versionResolver;
-	private final RepositoryPathBuilder repositoryPathBuilder;
-	private final CredentialsProvider credentialsProvider;
-	private final String defaultGroupId; // e.g. "de.soderer"
 
+	/** Builds the jar paths in the local repository */
+	private final RepositoryPathBuilder repositoryPathBuilder;
+
+	/** Credentials for url placeholder substitution, may be null */
+	private final CredentialsProvider credentialsProvider;
+
+	/** GroupId used for the local repository path of all dependencies, e.g. "de.soderer" */
+	private final String defaultGroupId;
+
+	/**
+	 * Creates a downloader.
+	 *
+	 * @param versionResolver       resolves the effective version and url template of each dependency
+	 * @param repositoryPathBuilder builds the jar paths in the local repository
+	 * @param credentialsProvider   credentials for the {username}/{password} url placeholders, or
+	 *                              null if no credentials are needed
+	 * @param defaultGroupId        groupId used for the local repository path of all
+	 *                              dependencies, e.g. "de.soderer"
+	 */
 	public DependencyDownloader(final VersionResolver versionResolver,
 			final RepositoryPathBuilder repositoryPathBuilder,
 			final CredentialsProvider credentialsProvider,
@@ -42,16 +60,33 @@ public class DependencyDownloader {
 	/**
 	 * Resolves and, if not already present locally, downloads the dependency's jar.
 	 *
+	 * An existing jar in the local repository is trusted without any further check, so it is
+	 * not downloaded again.
+	 *
+	 * @param dependencyEntry the dependency to resolve
 	 * @return the path of the jar in the local repository
+	 * @throws Exception if the dependency is incompletely defined, the version cannot be
+	 *                   resolved, or the download fails
 	 */
 	public Path resolveAndDownload(final DependencyEntry dependencyEntry) throws Exception {
+		if (dependencyEntry.getName() == null) {
+			throw new IllegalStateException("Dependency requires 'name' to be set");
+		}
 		final ResolvedDependency resolvedDependency = versionResolver.resolve(dependencyEntry);
+		if (resolvedDependency.getVersion() == null) {
+			throw new IllegalStateException("No version available for dependency '" + resolvedDependency.getName() + "'");
+		}
 
 		final Path targetPath = repositoryPathBuilder.buildJarPath(
-				defaultGroupId, resolvedDependency.getName().toLowerCase(), resolvedDependency.getVersion());
+				defaultGroupId, resolvedDependency.getName().toLowerCase(Locale.ROOT), resolvedDependency.getVersion());
 
 		if (Files.isRegularFile(targetPath)) {
 			return targetPath; // already present, nothing to do
+		}
+
+		if (resolvedDependency.getDownloadUrlTemplate() == null) {
+			throw new IllegalStateException("No download url available for dependency '" + resolvedDependency.getName()
+					+ "': set 'url' or provide a Versions.json entry");
 		}
 
 		final Map<String, String> placeholderValues = new HashMap<>();
@@ -73,13 +108,25 @@ public class DependencyDownloader {
 	 * Downloads into a temporary file next to the target first and moves it into place only when
 	 * complete, because an existing file in the local repository is trusted on the next run: an
 	 * interrupted download must never leave a partial jar there.
+	 *
+	 * @param downloadUrl     the url to download, may contain credentials
+	 * @param targetPath      the final path in the local repository
+	 * @param dependencyEntry the dependency, for proxy/TLS settings and error messages
+	 * @throws Exception if the download fails or the server does not answer with HTTP 200
 	 */
 	private static void downloadToFile(final String downloadUrl, final Path targetPath, final DependencyEntry dependencyEntry) throws Exception {
 		Files.createDirectories(targetPath.getParent());
 
 		final HttpClient httpClient = HttpClientFactory.createHttpClient(downloadUrl, dependencyEntry.getProxyConfig(), dependencyEntry.getTlsCertificateFile());
 
-		final HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(downloadUrl)).GET().build();
+		final URI downloadUri;
+		try {
+			downloadUri = URI.create(downloadUrl);
+		} catch (@SuppressWarnings("unused") final IllegalArgumentException e) {
+			// The exception message would contain the url and so possibly the credentials
+			throw new IOException("Invalid download url for dependency '" + dependencyEntry.getName() + "'");
+		}
+		final HttpRequest httpRequest = HttpRequest.newBuilder(downloadUri).GET().build();
 		final HttpResponse<InputStream> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
 
 		if (httpResponse.statusCode() != 200) {

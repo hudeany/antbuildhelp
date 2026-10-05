@@ -34,6 +34,9 @@ import de.soderer.pac.utilities.ProxyConfiguration.ProxyConfigurationType;
  */
 public final class HttpClientFactory {
 
+	/**
+	 * Utility class, not instantiable.
+	 */
 	private HttpClientFactory() {
 		// Utility class
 	}
@@ -45,6 +48,9 @@ public final class HttpClientFactory {
 	 * @param proxyConfig        proxy settings, or null for a direct connection
 	 * @param tlsCertificateFile path of an additionally trusted X.509 certificate file (PEM or DER),
 	 *                           or null to trust the JVM's default CAs only
+	 * @return the configured HttpClient
+	 * @throws Exception if the proxy cannot be determined (invalid proxy url, PAC script not
+	 *                   loadable) or the certificate file cannot be read
 	 */
 	public static HttpClient createHttpClient(final String targetUrl, final ProxyConfig proxyConfig, final String tlsCertificateFile) throws Exception {
 		final HttpClient.Builder httpClientBuilder = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL);
@@ -60,15 +66,19 @@ public final class HttpClientFactory {
 
 	/**
 	 * Resolves the proxy to use for the given target url, in precedence order:
-	 * explicit proxyUrl &gt; explicit PAC url &gt; WPAD auto-discovery. Returns null for DIRECT
-	 * (no proxy configured / no proxy needed for this url).
+	 * explicit proxyUrl &gt; explicit PAC url &gt; WPAD auto-discovery.
+	 *
+	 * @param proxyConfig proxy settings, or null for a direct connection
+	 * @param targetUrl   url the client is used for, needed for PAC/WPAD proxy resolution
+	 * @return the proxy selector, or null for DIRECT (no proxy configured / no proxy needed for
+	 *         this url)
+	 * @throws Exception if the proxy url is invalid or the PAC script cannot be evaluated
 	 */
 	private static ProxySelector resolveProxySelector(final ProxyConfig proxyConfig, final String targetUrl) throws Exception {
 		if (proxyConfig == null) {
 			return null;
 		} else if (proxyConfig.getProxyUrl() != null) {
-			final URI proxyUri = URI.create(proxyConfig.getProxyUrl());
-			return ProxySelector.of(new InetSocketAddress(proxyUri.getHost(), proxyUri.getPort()));
+			return ProxySelector.of(parseProxyAddress(proxyConfig.getProxyUrl()));
 		} else if (proxyConfig.getPacUrl() != null) {
 			return toProxySelector(new ProxyConfiguration(ProxyConfigurationType.PACURL, proxyConfig.getPacUrl()).getProxy(targetUrl));
 		} else if (proxyConfig.isUseWpad()) {
@@ -78,6 +88,36 @@ public final class HttpClientFactory {
 		}
 	}
 
+	/**
+	 * Parses a direct proxy given as "scheme://host:port" or as plain "host:port". The port
+	 * defaults to 80 if omitted.
+	 *
+	 * @param proxyUrl the proxy url
+	 * @return the socket address of the proxy
+	 * @throws IllegalArgumentException if the proxy url has no host or an invalid port
+	 */
+	static InetSocketAddress parseProxyAddress(final String proxyUrl) {
+		final String trimmedProxyUrl = proxyUrl.trim();
+		// Without "://", "proxy:8080" would be parsed as an opaque URI with scheme "proxy" and no host
+		final URI proxyUri;
+		try {
+			proxyUri = URI.create(trimmedProxyUrl.contains("://") ? trimmedProxyUrl : "http://" + trimmedProxyUrl);
+		} catch (final IllegalArgumentException e) {
+			throw new IllegalArgumentException("Invalid proxyUrl '" + proxyUrl + "': " + e.getMessage(), e);
+		}
+		if (proxyUri.getHost() == null) {
+			throw new IllegalArgumentException("Invalid proxyUrl '" + proxyUrl + "': no host found (expected e.g. http://proxy.example.com:8080)");
+		}
+		final int port = proxyUri.getPort() >= 0 ? proxyUri.getPort() : 80;
+		return new InetSocketAddress(proxyUri.getHost(), port);
+	}
+
+	/**
+	 * Wraps a single proxy, as returned by PAC/WPAD evaluation, into a ProxySelector.
+	 *
+	 * @param proxy the proxy, may be null
+	 * @return the proxy selector, or null for DIRECT
+	 */
 	private static ProxySelector toProxySelector(final Proxy proxy) {
 		if (proxy == null || proxy.type() == Proxy.Type.DIRECT) {
 			return null; // HttpClient defaults to DIRECT when no ProxySelector is set
@@ -88,6 +128,11 @@ public final class HttpClientFactory {
 	/**
 	 * Builds an SSLContext that trusts the JVM's default CAs plus the given additional
 	 * certificate (e.g. a corporate MITM proxy root certificate such as Zscaler's).
+	 *
+	 * @param certificateFilePath path of the additionally trusted X.509 certificate file (PEM or DER)
+	 * @return the SSLContext
+	 * @throws Exception if the certificate file cannot be read or parsed, or the default trust
+	 *                   store is not available
 	 */
 	static SSLContext buildSslContextWithAdditionalTrust(final String certificateFilePath) throws Exception {
 		final TrustManagerFactory defaultTrustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());

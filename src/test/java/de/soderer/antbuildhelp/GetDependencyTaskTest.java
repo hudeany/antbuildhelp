@@ -168,4 +168,14 @@ class GetDependencyTaskTest {
 		final BuildException buildException = assertThrows(BuildException.class, task::execute);
 		assertTrue(buildException.getMessage().contains("'plainlib'"), buildException.getMessage());
 	}
+
+	@Test
+	void dotDotFileNameFromContentDispositionIsIgnored() throws Exception {
+		final byte[] jarBytes = AntTestUtilities.createJarBytes("dotlib 1.0.0");
+		testHttpServer.addFile("/index.php?download=dotlib.jar", jarBytes, Map.of("Content-Disposition", "attachment; filename=\"..\""));
+
+		createTask("dotlib", "1.0.0", testHttpServer.getBaseUrl() + "/index.php?download=dotlib.jar").execute();
+
+		assertArrayEquals(jarBytes, Files.readAllBytes(libFile("dotlib-1.0.0.jar")));
+	}
 }

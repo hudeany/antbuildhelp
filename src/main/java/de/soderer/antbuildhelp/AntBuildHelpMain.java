@@ -29,8 +29,23 @@ import java.util.Map;
  */
 public class AntBuildHelpMain {
 
+	/** Arguments that must always be given, independent of the mode */
 	private static final String[] ALWAYS_REQUIRED_ARGS = { "version" };
 
+	/**
+	 * Not instantiable, only the static {@link #main(String[])} method is used.
+	 */
+	private AntBuildHelpMain() {
+		// Only the static main method is used
+	}
+
+	/**
+	 * CLI entry point. Prints the usage and exits with code 1 when called without arguments
+	 * (code 0 for "--help"/"-h"); exits with code 1 and an error message on stderr if the
+	 * dependency cannot be resolved.
+	 *
+	 * @param args "--key=value" arguments, see the class description
+	 */
 	public static void main(final String[] args) {
 		if (args.length == 0 || "--help".equals(args[0]) || "-h".equals(args[0])) {
 			printUsage();
@@ -74,6 +89,13 @@ public class AntBuildHelpMain {
 		}
 	}
 
+	/**
+	 * Parses "--key=value" arguments; a bare "--key" is taken as "--key=true".
+	 *
+	 * @param args the command line arguments
+	 * @return the options by key, in argument order
+	 * @throws IllegalArgumentException if an argument does not start with "--"
+	 */
 	private static Map<String, String> parseArgs(final String[] args) {
 		final Map<String, String> options = new LinkedHashMap<>();
 		for (final String arg : args) {
@@ -91,11 +113,20 @@ public class AntBuildHelpMain {
 		return options;
 	}
 
+	/**
+	 * Resolves the libDir option against the current working directory when relative.
+	 *
+	 * @param libDirOption the libDir option, or null for the default "lib"
+	 * @return the absolute target directory
+	 */
 	private static Path resolveLibDir(final String libDirOption) {
 		final Path libDirPath = libDirOption != null ? Paths.get(libDirOption) : Paths.get("lib");
 		return libDirPath.isAbsolute() ? libDirPath : Paths.get(System.getProperty("user.dir")).resolve(libDirPath);
 	}
 
+	/**
+	 * Prints the usage information to stdout.
+	 */
 	private static void printUsage() {
 		System.out.println("AntBuildHelp - resolve and download a single dependency jar");
 		System.out.println();

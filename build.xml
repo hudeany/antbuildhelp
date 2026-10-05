@@ -1,173 +1,45 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project default="cleanup_after" basedir=".">
-	<!-- Dependencies START -->
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project default="build_jar" name="Build library antbuildhelp">
+	<!-- ===== Project specific part ===== -->
+
+	<!-- Artifact name used for the jar file names and the Maven artifactId -->
+	<property name="artifactId" value="antbuildhelp" />
+
+	<!-- Executable library: Main-Class for "java -jar antbuildhelp.jar" -->
+	<property name="mainClass" value="de.soderer.antbuildhelp.AntBuildHelpMain" />
+
+	<!-- Runtime dependencies in "lib/": their classes are embedded into the resulting jar (see create_jar),
+	     so its Maven POM must not list them as dependencies -->
 	<property name="json.version" value="26.2.6" />
 	<property name="proxyautoconfig.version" value="26.1.2" />
-	
-	<!-- The classes of all dependencies in "lib" are embedded into the resulting AntBuildHelp.jar, so its
-	     Maven POM must not list them as dependencies.
-	     "apacheant" is needed at build time only and is not included in the resulting AntBuildHelp.jar -->
+
+	<!-- Build dependency in "lib_ant/": needed for compiling and testing the Ant tasks only, never embedded -->
 	<property name="apacheant.version" value="1.10.17" />
 
-	<!-- Test dependency, needed at build time only -->
+	<!-- Test dependency in "lib_test/" -->
 	<property name="junit.version" value="1.13.4" />
-	<!-- Dependencies END -->
-	
-	<available file="${user.home}/git/codeSigning.properties" property="codeSigningPropertiesAvailable" />
 
-	<target name="build_setup">
-		<echo>Java/JVM HOME: ${java.home}</echo>
-		<echo>Java/JVM version: ${ant.java.version}</echo>
-		<echo>Java/JVM detailed version: ${java.version}</echo>
+	<!-- Dependencies are downloaded only if the configured version is not yet present -->
+	<target name="download_dependencies" depends="get_json, get_proxyautoconfig, get_ant" />
 
-		<loadfile property="build.version" srcFile="build.version" failonerror="false" />
-		<property name="build.version" value="26.0.0" />
-		<echo message="build.version: ${build.version}" />
+	<target name="download_test_dependencies" depends="get_junit" />
 
-		<property file="${user.home}/git/codeSigning.properties" />
-
-		<property environment="env"/>
-
-		<property name="lib.dir" value="lib" />
-		<property name="lib.ant.dir" value="lib_ant" />
-		<!-- Maven standard directory layout -->
-		<property name="src.dir" value="src/main/java" />
-		<property name="resources.dir" value="src/main/resources" />
-		<property name="test.src.dir" value="src/test/java" />
-		<property name="lib.test.dir" value="lib_test" />
-		<property name="build.dir" value="build" />
-		<property name="classes.dir" value="${build.dir}/classes" />
-		<property name="javadoc.dir" value="${build.dir}/javadoc" />
-		<property name="test.classes.dir" value="${build.dir}/test-classes" />
-		<property name="jar.file" value="${build.dir}/antbuildhelp-${build.version}.jar" />
-		<property name="javadoc.jar.file" value="${build.dir}/antbuildhelp-${build.version}-javadoc.jar" />
-		<property name="sources.jar.file" value="${build.dir}/antbuildhelp-${build.version}-sources.jar" />
-
-		<tstamp>
-			<format property="buildTime" pattern="yyyy-MM-dd HH:mm:ss" locale="en" />
-		</tstamp>
-		<echo message="buildTime: ${buildTime}" />
-
-		<condition property="HOME" value="${user.home}">
-			<and>
-				<isset property="user.home" />
-				<available file="${user.home}" type="dir" />
-			</and>
-		</condition>
-		<condition property="HOME" value="${env.HOME}">
-			<and>
-				<isset property="env.HOME" />
-				<available file="${env.HOME}" type="dir" />
-			</and>
-		</condition>
-		<fail message="Property &quot;env.HOME&quot; or &quot;user.home&quot; was not set properly" unless="HOME" />
-	</target>
-	
-	<target name="cleanup_before" depends="build_setup">
-		<delete dir="${build.dir}" />
+	<available file="lib/json-${json.version}.jar" property="json.available" />
+	<target name="get_json" unless="json.available">
+		<mkdir dir="lib/" />
+		<delete>
+			<fileset dir="lib/" includes="json-*.jar" />
+		</delete>
+		<get src="https://github.com/hudeany/json/releases/download/${json.version}/json-${json.version}.jar" dest="lib/" />
 	</target>
 
-	<target name="download_dependencies" depends="get_ant, get_json, get_proxyautoconfig" />
-
-	<target name="compile" depends="cleanup_before, build_setup, download_dependencies">
-		<path id="compile.classpath">
-			<fileset dir="${lib.dir}" includes="*.jar" />
-			<fileset dir="${lib.ant.dir}" includes="*.jar" />
-		</path>
-
-		<mkdir dir="${classes.dir}" />
-		<javac srcdir="${src.dir}" destdir="${classes.dir}" includeantruntime="false" release="17" classpathref="compile.classpath" />
-	</target>
-
-	<target name="jar" depends="compile">
-		<mkdir dir="${build.dir}" />
-		<jar destfile="${jar.file}" basedir="${classes.dir}" duplicate="fail">
-			<manifest>
-				<attribute name="Main-Class" value="de.soderer.antbuildhelp.AntBuildHelpMain" />
-			</manifest>
-			<fileset dir="${src.dir}" excludes="**/*.java" />
-			<fileset dir="${resources.dir}" erroronmissingdir="false" />
-			<!-- AntBuildHelp's own license file, if existing -->
-			<fileset dir="." includes="LICENSE*" />
-			<!-- Embed the classes of the runtime dependencies (not the jars themselves), so they are visible
-			     for "java -jar", for Ant's typedef classloader and for Maven consumers alike.
-			     META-INF is excluded, because the signature files of the signed dependency jars would
-			     otherwise invalidate the resulting jar. Their license files are excluded, because every
-			     embedded jar brings its own "LICENSE.txt" (duplicate entries break jarsigner).
-			     duplicate="fail" makes any other duplicate entry (e.g. a class contained in both
-			     dependencies) fail the build instead of producing a broken or ambiguous jar. -->
-			<restrict>
-				<archives>
-					<zips>
-						<fileset dir="${lib.dir}" includes="json-${json.version}.jar,proxyautoconfig-${proxyautoconfig.version}.jar" />
-					</zips>
-				</archives>
-				<not>
-					<or>
-						<name name="META-INF/**" />
-						<name name="LICENSE*" />
-					</or>
-				</not>
-			</restrict>
-		</jar>
-	</target>
-
-	<target name="sign_jar" depends="jar" if="codeSigningPropertiesAvailable">
-		<signjar destDir="${build.dir}" alias="${CodeSigningKeyAlias}" keystore="${CodeSigningKeyStore}" storepass="${CodeSigningKeyStorePassword}" keypass="${CodeSigningKeyPassword}" preservelastmodified="true" tsaurl="${TsaUrl}">
-			<path>
-				<fileset dir="${build.dir}" includes="antbuildhelp-${build.version}.jar" />
-			</path>
-		</signjar>
-	</target>
-
-	<!-- Javadoc jar, required for Maven Central. Covers AntBuildHelp's own classes only - the embedded
-	     json/proxyautoconfig classes are documented in their own artifacts. -->
-	<target name="javadoc_jar" depends="compile">
-		<mkdir dir="${javadoc.dir}" />
-		<javadoc destdir="${javadoc.dir}" classpathref="compile.classpath" source="17" encoding="UTF-8" charset="UTF-8" docencoding="UTF-8" failonerror="true" additionalparam="-Xdoclint:none">
-			<fileset dir="${src.dir}" includes="**/*.java" />
-		</javadoc>
-		<jar destfile="${javadoc.jar.file}" basedir="${javadoc.dir}" />
-	</target>
-
-	<!-- Sources jar, required for Maven Central (AntBuildHelp's own sources and resources only) -->
-	<target name="sources_jar" depends="build_setup">
-		<mkdir dir="${build.dir}" />
-		<jar destfile="${sources.jar.file}">
-			<fileset dir="${src.dir}" />
-			<fileset dir="${resources.dir}" erroronmissingdir="false" />
-		</jar>
-	</target>
-
-	<target name="compile_test" depends="compile, get_junit">
-		<path id="test.classpath">
-			<pathelement location="${test.classes.dir}" />
-			<pathelement location="${classes.dir}" />
-			<fileset dir="${lib.dir}" includes="*.jar" />
-			<fileset dir="${lib.ant.dir}" includes="*.jar" />
-			<fileset dir="${lib.test.dir}" includes="*.jar" />
-		</path>
-
-		<mkdir dir="${test.classes.dir}" />
-		<javac srcdir="${test.src.dir}" destdir="${test.classes.dir}" includeantruntime="false" release="17" classpathref="test.classpath" />
-	</target>
-
-	<!-- Runs all JUnit 5 tests via the JUnit console launcher (no extra Ant libraries needed). The tests
-	     use a local HTTP server only, no internet access. -->
-	<target name="test" depends="compile_test">
-		<java jar="${lib.test.dir}/junit-platform-console-standalone-${junit.version}.jar" fork="true" failonerror="true">
-			<arg value="execute" />
-			<arg value="--class-path" />
-			<arg pathref="test.classpath" />
-			<arg value="--scan-class-path" />
-			<arg value="--fail-if-no-tests" />
-		</java>
-	</target>
-
-	<target name="cleanup_after" depends="test, sign_jar, javadoc_jar, sources_jar">
-		<delete dir="${classes.dir}" />
-		<delete dir="${test.classes.dir}" />
-		<delete dir="${javadoc.dir}" />
+	<available file="lib/proxyautoconfig-${proxyautoconfig.version}.jar" property="proxyautoconfig.available" />
+	<target name="get_proxyautoconfig" unless="proxyautoconfig.available">
+		<mkdir dir="lib/" />
+		<delete>
+			<fileset dir="lib/" includes="proxyautoconfig-*.jar" />
+		</delete>
+		<get src="https://github.com/hudeany/ProxyAutoConfig/releases/download/${proxyautoconfig.version}/proxyautoconfig-${proxyautoconfig.version}.jar" dest="lib/" />
 	</target>
 
 	<!-- "ant-launcher" is needed by the tests only: Project.init() references org.apache.tools.ant.launch.AntMain,
@@ -182,7 +54,7 @@
 	<target name="get_ant" unless="ant.available">
 		<mkdir dir="lib_ant/" />
 		<delete>
-			<fileset dir="lib_ant" includes="ant-*.jar" />
+			<fileset dir="lib_ant/" includes="ant-*.jar" />
 		</delete>
 		<get src="https://repo1.maven.org/maven2/org/apache/ant/ant/${apacheant.version}/ant-${apacheant.version}.jar" dest="lib_ant/" />
 		<get src="https://repo1.maven.org/maven2/org/apache/ant/ant-launcher/${apacheant.version}/ant-launcher-${apacheant.version}.jar" dest="lib_ant/" />
@@ -192,26 +64,208 @@
 	<target name="get_junit" unless="junit.available">
 		<mkdir dir="lib_test/" />
 		<delete>
-			<fileset dir="lib_test" includes="junit-platform-console-standalone-*.jar" />
+			<fileset dir="lib_test/" includes="junit-platform-console-standalone-*.jar" />
 		</delete>
 		<get src="https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/${junit.version}/junit-platform-console-standalone-${junit.version}.jar" dest="lib_test/" />
 	</target>
 
-	<available file="lib/json-${json.version}.jar" property="json.available" />
-	<target name="get_json" unless="json.available">
-		<mkdir dir="lib/" />
-		<delete>
-			<fileset dir="lib" includes="json-*.jar" />
+	<!-- ===== General part: same structure and names as the common part of the other libraries,
+	     extended by the special functions of AntBuildHelp ===== -->
+
+	<echo message="Java Version: ${java.version}" />
+	<echo message="Java Home: ${java.home}" />
+	<echo message="Ant Version: ${ant.version}" />
+
+	<!-- Strip line breaks so a trailing newline in build.version does not end up in file names -->
+	<loadfile property="version" srcFile="build.version" failonerror="false">
+		<filterchain>
+			<striplinebreaks />
+		</filterchain>
+	</loadfile>
+	<property name="version" value="26.0.0" />
+
+	<echo message="artifactId: ${artifactId}" />
+	<echo message="version (build.version): ${version}" />
+
+	<property name="buildPath" value="build" />
+	<echo message="buildPath: ${buildPath}" />
+
+	<tstamp>
+		<format property="buildTime" pattern="yyyy-MM-dd HH:mm:ss" locale="en" />
+	</tstamp>
+	<echo message="buildTime: ${buildTime}" />
+
+	<!-- Code signing of the main jar, only if the signing configuration exists -->
+	<property file="${user.home}/git/codeSigning.properties" />
+	<available file="${user.home}/git/codeSigning.properties" property="codeSigningPropertiesAvailable" />
+
+	<!-- Runtime libraries; their classes are embedded into the main jar -->
+	<path id="runtime.libs">
+		<fileset dir="lib" erroronmissingdir="false">
+			<include name="*.jar" />
+		</fileset>
+	</path>
+
+	<!-- Build libraries (Ant); needed for compiling, javadoc and tests, never embedded -->
+	<path id="build.libs">
+		<fileset dir="lib_ant" erroronmissingdir="false">
+			<include name="*.jar" />
+		</fileset>
+	</path>
+
+	<target name="build_jar" depends="cleanup_before, create_jar, test, sign_jar, create_checksums, create_javadoc, cleanup_after" />
+
+	<target name="cleanup_before">
+		<mkdir dir="${buildPath}" />
+
+		<delete includeEmptyDirs="true">
+			<fileset dir="${buildPath}">
+				<include name="*" />
+			</fileset>
 		</delete>
-		<get src="https://github.com/hudeany/json/releases/download/${json.version}/json-${json.version}.jar" dest="lib/" />
+
+		<delete dir="${buildPath}/bin" />
+		<mkdir dir="${buildPath}/bin" />
+
+		<delete dir="${buildPath}/testbin" />
+		<mkdir dir="${buildPath}/testbin" />
 	</target>
 
-	<available file="lib/proxyautoconfig-${proxyautoconfig.version}.jar" property="proxyautoconfig.available" />
-	<target name="get_proxyautoconfig" unless="proxyautoconfig.available">
-		<mkdir dir="lib/" />
-		<delete>
-			<fileset dir="lib" includes="proxyautoconfig-*.jar" />
-		</delete>
-		<get src="https://github.com/hudeany/ProxyAutoConfig/releases/download/${proxyautoconfig.version}/proxyautoconfig-${proxyautoconfig.version}.jar" dest="lib/" />
+	<target name="create_jar" depends="cleanup_before, download_dependencies">
+		<javac release="17" srcdir="src/main/java" destdir="${buildPath}/bin" includeantruntime="false" encoding="UTF-8" debug="true" deprecation="false" nowarn="true">
+			<classpath refid="runtime.libs" />
+			<classpath refid="build.libs" />
+			<compilerarg value="-Xlint:unchecked" />
+			<compilerarg value="-parameters" />
+		</javac>
+
+		<copy todir="${buildPath}/bin">
+			<fileset dir="src/main/resources" erroronmissingdir="false" />
+		</copy>
+
+		<!-- Special: the classes of the runtime dependencies (not the jars themselves) are embedded, so they are
+		     visible for "java -jar", for Ant's typedef classloader and for Maven consumers alike.
+		     META-INF is excluded, because the signature files of the signed dependency jars would otherwise
+		     invalidate the resulting jar. Their license files are excluded, because every embedded jar brings
+		     its own "LICENSE.txt" (duplicate entries break jarsigner).
+		     duplicate="fail" makes any other duplicate entry (e.g. a class contained in both dependencies)
+		     fail the build instead of producing a broken or ambiguous jar. -->
+		<jar destfile="${buildPath}/${artifactId}-${version}.jar" duplicate="fail">
+			<manifest>
+				<attribute name="Version" value="${version}" />
+				<attribute name="Main-Class" value="${mainClass}" />
+			</manifest>
+
+			<fileset dir="${buildPath}/bin" />
+			<fileset dir="" includes="LICENSE.txt" />
+			<restrict>
+				<archives>
+					<zips>
+						<fileset dir="lib" includes="json-${json.version}.jar,proxyautoconfig-${proxyautoconfig.version}.jar" />
+					</zips>
+				</archives>
+				<not>
+					<or>
+						<name name="META-INF/**" />
+						<name name="LICENSE*" />
+					</or>
+				</not>
+			</restrict>
+		</jar>
+
+		<!-- Sources jar, required for Maven Central (AntBuildHelp's own sources only) -->
+		<jar destfile="${buildPath}/${artifactId}-${version}-sources.jar">
+			<manifest>
+				<attribute name="Version" value="${version}" />
+			</manifest>
+
+			<fileset dir="src/main/java" includes="**/*.java" />
+			<fileset dir="src/main/resources" erroronmissingdir="false" />
+			<fileset dir="" includes="LICENSE.txt" />
+		</jar>
+	</target>
+
+	<!-- Special: signs the main jar, if the code signing configuration is available.
+	     Runs after the tests, because the tests must use the unsigned jar: the test classes partly share
+	     packages with the jar's classes (e.g. de.soderer.antbuildhelp.download), and the JVM refuses to
+	     load unsigned and signed classes of the same package ("signer information does not match"). -->
+	<target name="sign_jar" depends="create_jar, test" if="codeSigningPropertiesAvailable">
+		<signjar destDir="${buildPath}" alias="${CodeSigningKeyAlias}" keystore="${CodeSigningKeyStore}" storepass="${CodeSigningKeyStorePassword}" keypass="${CodeSigningKeyPassword}" preservelastmodified="true" tsaurl="${TsaUrl}">
+			<path>
+				<fileset dir="${buildPath}" includes="${artifactId}-${version}.jar" />
+			</path>
+		</signjar>
+	</target>
+
+	<!-- Separate from create_jar, because signing changes the main jar -->
+	<target name="create_checksums" depends="create_jar, sign_jar">
+		<checksum file="${buildPath}/${artifactId}-${version}.jar" fileext=".md5" forceOverwrite="yes" />
+		<checksum file="${buildPath}/${artifactId}-${version}.jar" algorithm="SHA-1" fileext=".sha1" forceOverwrite="yes" />
+		<checksum file="${buildPath}/${artifactId}-${version}-sources.jar" fileext=".md5" forceOverwrite="yes" />
+		<checksum file="${buildPath}/${artifactId}-${version}-sources.jar" algorithm="SHA-1" fileext=".sha1" forceOverwrite="yes" />
+	</target>
+
+	<!-- Special: runs all JUnit 5 tests via the JUnit console launcher (no extra Ant libraries needed).
+	     The tests run against the main jar (still unsigned, see sign_jar) instead of "lib/", so the embedded
+	     dependency classes are tested too. They use a local HTTP server only, no internet access. -->
+	<target name="test" depends="create_jar, download_test_dependencies">
+		<path id="test.classpath">
+			<fileset dir="lib_test">
+				<include name="*.jar" />
+			</fileset>
+			<path refid="build.libs" />
+			<pathelement location="${buildPath}/${artifactId}-${version}.jar" />
+			<pathelement location="${buildPath}/testbin" />
+		</path>
+
+		<javac release="17" srcdir="src/test/java" destdir="${buildPath}/testbin" includeantruntime="false" encoding="UTF-8" debug="true" failonerror="true">
+			<classpath refid="test.classpath" />
+			<include name="**/*.java" />
+		</javac>
+
+		<copy todir="${buildPath}/testbin">
+			<fileset dir="src/test/resources" erroronmissingdir="false" />
+		</copy>
+
+		<java jar="lib_test/junit-platform-console-standalone-${junit.version}.jar" fork="true" failonerror="true">
+			<arg value="execute" />
+			<arg value="--class-path" />
+			<arg pathref="test.classpath" />
+			<arg value="--scan-class-path" />
+			<arg value="--fail-if-no-tests" />
+		</java>
+	</target>
+
+	<!-- Javadoc jar, required for Maven Central. Covers AntBuildHelp's own classes only - the embedded
+	     json/proxyautoconfig classes are documented in their own artifacts.
+	     doclint stays enabled: AntBuildHelp's javadoc is complete, so any new warning shows up at once. -->
+	<target name="create_javadoc" depends="create_jar">
+		<delete dir="${buildPath}/javadoc" />
+		<mkdir dir="${buildPath}/javadoc" />
+
+		<javadoc destdir="${buildPath}/javadoc" encoding="UTF-8" charset="UTF-8" docencoding="UTF-8" source="17" failonerror="true">
+			<classpath refid="runtime.libs" />
+			<classpath refid="build.libs" />
+			<arg value="-quiet" />
+			<fileset dir="src/main/java" includes="**/*.java" />
+		</javadoc>
+
+		<jar destfile="${buildPath}/${artifactId}-${version}-javadoc.jar">
+			<manifest>
+				<attribute name="Version" value="${version}" />
+			</manifest>
+
+			<fileset dir="${buildPath}/javadoc" />
+			<fileset dir="" includes="LICENSE.txt" />
+		</jar>
+		<checksum file="${buildPath}/${artifactId}-${version}-javadoc.jar" fileext=".md5" forceOverwrite="yes" />
+		<checksum file="${buildPath}/${artifactId}-${version}-javadoc.jar" algorithm="SHA-1" fileext=".sha1" forceOverwrite="yes" />
+
+		<delete dir="${buildPath}/javadoc" />
+	</target>
+
+	<target name="cleanup_after" depends="test, create_javadoc">
+		<delete dir="${buildPath}/bin" />
+		<delete dir="${buildPath}/testbin" />
 	</target>
 </project>

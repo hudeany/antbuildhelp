@@ -1,5 +1,6 @@
 package de.soderer.antbuildhelp;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -97,5 +98,73 @@ class ResolveDependenciesTaskTest {
 		dependencyElement.setUrl(testHttpServer.getBaseUrl() + "/files/{name}-{version}.jar");
 
 		assertThrows(BuildException.class, task::execute);
+	}
+
+	@Test
+	void dependencyWithoutNameFails() {
+		final ResolveDependenciesTask task = createTask();
+		task.createDependency().setVersion("1.0.0");
+
+		final BuildException buildException = assertThrows(BuildException.class, task::execute);
+		assertTrue(buildException.getMessage().contains("'name'"), buildException.getMessage());
+	}
+
+	@Test
+	void fixedVersionWithoutUrlFails() {
+		final ResolveDependenciesTask task = createTask();
+		final ResolveDependenciesTask.DependencyElement dependencyElement = task.createDependency();
+		dependencyElement.setName("nourllib");
+		dependencyElement.setVersion("1.0.0");
+
+		final BuildException buildException = assertThrows(BuildException.class, task::execute);
+		assertTrue(buildException.getMessage().contains("No download url"), buildException.getMessage());
+	}
+
+	@Test
+	void usernameWithoutPasswordSubstitutesEmptyPassword() {
+		final byte[] jarBytes = AntTestUtilities.createJarBytes("securelib 1.0.0");
+		testHttpServer.addFile("/files/securelib.jar?user=me&pw=", jarBytes);
+
+		final ResolveDependenciesTask task = createTask();
+		task.setUsername("me");
+		final ResolveDependenciesTask.DependencyElement dependencyElement = task.createDependency();
+		dependencyElement.setName("securelib");
+		dependencyElement.setVersion("1.0.0");
+		dependencyElement.setUrl(testHttpServer.getBaseUrl() + "/files/securelib.jar?user=<username>&pw=<password>");
+		task.execute();
+
+		assertTrue(AntTestUtilities.findFileWithContent(repositoryRoot, jarBytes).isPresent(), "Jar not found below " + repositoryRoot);
+	}
+
+	@Test
+	void passwordWithReservedCharactersIsEncodedInUrl() {
+		final byte[] jarBytes = AntTestUtilities.createJarBytes("encodedlib 1.0.0");
+		testHttpServer.addFile("/files/encodedlib.jar?user=me&pw=p%26ss%23w%C3%B6rd%20x", jarBytes);
+
+		final ResolveDependenciesTask task = createTask();
+		task.setUsername("me");
+		task.setPassword("p&ss#w\u00f6rd x");
+		final ResolveDependenciesTask.DependencyElement dependencyElement = task.createDependency();
+		dependencyElement.setName("encodedlib");
+		dependencyElement.setVersion("1.0.0");
+		dependencyElement.setUrl(testHttpServer.getBaseUrl() + "/files/encodedlib.jar?user=<username>&pw=<password>");
+		task.execute();
+
+		assertTrue(AntTestUtilities.findFileWithContent(repositoryRoot, jarBytes).isPresent(), "Jar not found below " + repositoryRoot);
+	}
+
+	@Test
+	void invalidUrlTemplateDoesNotRevealPassword() {
+		final ResolveDependenciesTask task = createTask();
+		task.setUsername("me");
+		task.setPassword("topsecret");
+		final ResolveDependenciesTask.DependencyElement dependencyElement = task.createDependency();
+		dependencyElement.setName("brokenlib");
+		dependencyElement.setVersion("1.0.0");
+		dependencyElement.setUrl(testHttpServer.getBaseUrl() + "/files/broken lib.jar?pw=<password>");
+
+		final BuildException buildException = assertThrows(BuildException.class, task::execute);
+		assertTrue(buildException.getMessage().contains("'brokenlib'"), buildException.getMessage());
+		assertFalse(buildException.getMessage().contains("topsecret"), buildException.getMessage());
 	}
 }
