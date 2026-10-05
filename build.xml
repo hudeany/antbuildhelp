@@ -10,8 +10,8 @@
 
 	<!-- Runtime dependencies in "lib/": their classes are embedded into the resulting jar (see create_jar),
 	     so its Maven POM must not list them as dependencies -->
-	<property name="json.version" value="26.2.6" />
-	<property name="proxyautoconfig.version" value="26.1.2" />
+	<property name="json.version" value="26.2.8" />
+	<property name="proxyautoconfig.version" value="26.1.4" />
 
 	<!-- Build dependency in "lib_ant/": needed for compiling and testing the Ant tasks only, never embedded -->
 	<property name="apacheant.version" value="1.10.17" />
