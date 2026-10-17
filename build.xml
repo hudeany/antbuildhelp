@@ -17,7 +17,7 @@
 	<property name="apacheant.version" value="1.10.17" />
 
 	<!-- Test dependency in "lib_test/" -->
-	<property name="junit.version" value="1.13.4" />
+	<property name="junit.version" value="6.1.3" />
 
 	<!-- Dependencies are downloaded only if the configured version is not yet present -->
 	<target name="download_dependencies" depends="get_json, get_proxyautoconfig, get_ant" />
