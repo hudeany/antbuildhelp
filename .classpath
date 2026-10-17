@@ -10,8 +10,8 @@
 	</classpathentry>
 	<classpathentry kind="lib" path="lib/json-26.2.10.jar"/>
 	<classpathentry kind="lib" path="lib/proxyautoconfig-26.1.4.jar"/>
-	<classpathentry kind="lib" path="lib_ant/ant-1.10.17.jar"/>
-	<classpathentry kind="lib" path="lib_ant/ant-launcher-1.10.17.jar"/>
+	<classpathentry kind="lib" path="lib_ant/ant-1.10.18.jar"/>
+	<classpathentry kind="lib" path="lib_ant/ant-launcher-1.10.18.jar"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/6"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
